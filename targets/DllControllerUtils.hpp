@@ -8,29 +8,18 @@ struct DllControllerUtils
 {
     // Filter simultaneous up / down and left / right directions.
     // Prioritize down and left for keyboard only.
-    static uint16_t filterSimulDirState ( uint16_t state, bool isKeyboard )
+    static uint16_t filterSimulDirState ( uint16_t state )
     {
-        if ( isKeyboard )
-        {
-            if ( ( state & ( BIT_UP | BIT_DOWN ) ) == ( BIT_UP | BIT_DOWN ) )
-                state &= ~BIT_UP;
-            if ( ( state & ( BIT_LEFT | BIT_RIGHT ) ) == ( BIT_LEFT | BIT_RIGHT ) )
-                state &= ~BIT_RIGHT;
-        }
-        else
-        {
-            if ( ( state & ( BIT_UP | BIT_DOWN ) ) == ( BIT_UP | BIT_DOWN ) )
-                state &= ~ ( BIT_UP | BIT_DOWN );
-            if ( ( state & ( BIT_LEFT | BIT_RIGHT ) ) == ( BIT_LEFT | BIT_RIGHT ) )
-                state &= ~ ( BIT_LEFT | BIT_RIGHT );
-        }
-
+        if ( ( state & ( BIT_UP | BIT_DOWN ) ) == ( BIT_UP | BIT_DOWN ) )
+            state &= ~BIT_DOWN;
+        if ( ( state & ( BIT_LEFT | BIT_RIGHT ) ) == ( BIT_LEFT | BIT_RIGHT ) )
+            state &= ~ ( BIT_LEFT | BIT_RIGHT );
         return state;
     }
 
-    static uint16_t convertInputState ( uint32_t state, bool isKeyboard )
+    static uint16_t convertInputState ( uint32_t state )
     {
-        const uint16_t dirs = filterSimulDirState ( state & MASK_DIRS, isKeyboard );
+        const uint16_t dirs = filterSimulDirState ( state & MASK_DIRS );
         const uint16_t buttons = ( state & MASK_BUTTONS ) >> 8;
 
         uint8_t direction = 5;
@@ -56,7 +45,7 @@ struct DllControllerUtils
         if ( ! controller )
             return 0;
 
-        return convertInputState ( controller->getPrevState(), controller->isKeyboard() );
+        return convertInputState ( controller->getPrevState() );
     }
 
     static uint16_t getInput ( const Controller *controller )
@@ -64,7 +53,7 @@ struct DllControllerUtils
         if ( ! controller )
             return 0;
 
-        return convertInputState ( controller->getState(), controller->isKeyboard() );
+        return convertInputState ( controller->getState() );
     }
 
     static bool isButtonPressed ( const Controller *controller, uint16_t button )
