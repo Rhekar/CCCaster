@@ -451,6 +451,8 @@ void Socket::socketRead()
         return;
     }
 
+    _gotGoodRead = true;
+
     // Try to decode as many messages from the buffer as possible
     for ( ;; )
     {

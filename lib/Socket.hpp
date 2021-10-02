@@ -82,6 +82,7 @@ public:
     bool isTCP() const { return ( protocol == Protocol::TCP ); }
     bool isUDP() const { return ( protocol == Protocol::UDP ); }
     bool isSmart() const { return ( protocol == Protocol::Smart ); }
+    bool gotGoodRead() const { return _gotGoodRead; }
     virtual State getState() const { return _state; }
     virtual bool isConnecting() const { return isClient() && ( _state == State::Connecting ); }
     virtual bool isConnected() const { return isClient() && ( _state == State::Connected ); }
@@ -145,6 +146,9 @@ protected:
 
     // Raw socket type flag
     bool _isRaw = false;
+
+    // Did we get a successful recv()? If not, it is possible we never really connected
+    bool _gotGoodRead = false;
 
     // Connection state
     State _state = State::Disconnected;

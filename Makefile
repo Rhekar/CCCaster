@@ -60,8 +60,8 @@ ZIP = zip
 
 # OS specific tools / settings
 ifeq ($(OS),Windows_NT)
-	CHMOD_X = icacls $@ //grant Everyone:F
-	GRANT = icacls $@ //grant Everyone:F
+	CHMOD_X = icacls $@ /grant Everyone:F
+	GRANT = icacls $@ /grant Everyone:F
 	ASTYLE = 3rdparty/astyle.exe
 	OPENGL_HEADERS = /usr/mingw/i686-w64-mingw32/include/GL
 else

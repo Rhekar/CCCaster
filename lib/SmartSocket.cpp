@@ -270,7 +270,7 @@ void SmartSocket::socketDisconnected ( Socket *socket )
     {
         _directSocket.reset();
     }
-    else if ( socket == _directSocket.get() && isConnecting() )
+    else if ( socket == _directSocket.get() && (isConnecting() || isConnected() && !gotGoodRead()) )
     {
         LOG_SMART_SOCKET ( this, "Switching to UDP tunnel" );
 
@@ -282,7 +282,7 @@ void SmartSocket::socketDisconnected ( Socket *socket )
         if ( owner )
             ( ( SmartSocket::Owner * ) owner )->smartSocketSwitchedToUDP ( this );
     }
-    else if ( ( socket == _directSocket.get() && isConnected() ) || socket == _tunSocket.get() )
+    else if ( ( socket == _directSocket.get() && isConnected() && gotGoodRead()) || socket == _tunSocket.get() )
     {
         LOG_SMART_SOCKET ( this, "Tunnel socket disconnected" );
 
