@@ -19,7 +19,16 @@ jobs:
     # The type of runner that the job will run on
     runs-on: windows-latest
     # Steps represent a sequence of tasks that will be executed as part of the job
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            base-devel
+            git
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
@@ -35,6 +44,7 @@ jobs:
           dir C:\
           dir "C:\Program Files"
           dir "C:\Program Files (x86)"
+          dir "C:\Msys2"
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
