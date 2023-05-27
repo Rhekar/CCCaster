@@ -54,6 +54,8 @@ jobs:
          dir C:\ProgramData\Chocolatey
          dir C:\ProgramData\chocolatey\lib\mingw\
          dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
+         choco install tree
+         tree C:\ProgramData\chocolatey\lib\mingw\tools\
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
