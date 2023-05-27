@@ -32,7 +32,6 @@ jobs:
       # Update references
       - name: Git Sumbodule Update
         run: |
-          git pull --recurse-submodules
           git submodule update --remote --recursive
 
       # Runs a single command using the runners shell
