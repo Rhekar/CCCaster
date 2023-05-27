@@ -48,7 +48,7 @@ jobs:
       #    ls -l /c/Msys2
       - name: test windows
         run: |
-         dir "C:\Msys2"
+         dir "C:\msys64"
          dir C:\ProgramData\Chocolatey
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
