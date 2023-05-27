@@ -38,13 +38,15 @@ jobs:
           uname
           echo $PATH
           echo %PATH%
+          ls
           ls /mingw64/bin
-          ls /usr/local/bin
+          #ls /usr/local/bin
           ls /usr/bin
           ls /bin
           ls /c/Msys2
       - name: test windows
         run: |
+          dir C:\ProgramData\Chocolatey
           dir C:\ProgramData\Chocolatey\bin
           dir C:\
           dir "C:\Program Files"
