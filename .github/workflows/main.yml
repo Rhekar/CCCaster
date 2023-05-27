@@ -49,8 +49,8 @@ jobs:
       - name: test windows
         run: |
           choco install winlibs --x86
-          PATH=$PATH:/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin
-          PATH=$PATH:/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/i686-w64-mingw32/bin
+          echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin" >> $GITHUB_PATH
+          echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/i686-w64-mingw32/bin" >> $GITHUB_PATH
           #dir "C:\msys64"
           #dir "C:\msys64\mingw32"
           #dir "C:\msys64\mingw32\bin"
