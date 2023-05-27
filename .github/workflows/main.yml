@@ -20,39 +20,41 @@ jobs:
     runs-on: windows-latest
     # Steps represent a sequence of tasks that will be executed as part of the job
     defaults:
-      run:
-        shell: msys2 {0}
+      #run:
+      #  shell: msys2 {0}
     steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW32
-          path-type: inherit
+      #- uses: msys2/setup-msys2@v2
+      #  with:
+      #    msystem: MINGW32
+      #    path-type: inherit
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
       # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: |
-          uname
-          pacman -S mingw-w64-i686-toolchain
-          echo $PATH
-          echo %PATH%
-          ls
-          ls /mingw64/bin
-          #ls -al /usr/local/bin
-          ls -l /usr/bin
-          ls -l /bin
-          ls -l /mingw32/
-          ls -l /mingw32/bin
-      #    ls -l /c/Msys2
-      #- name: test windows
+      #- name: Run a one-line script
       #  run: |
-      #    dir C:\ProgramData\Chocolatey
+      #    uname
+      #    pacman -S mingw-w64-i686-toolchain
+      #    pacman -Q | grep mingw
+      #    echo $PATH
+      #    echo %PATH%
+      #    ls
+      #    ls /mingw64/bin
+      #    #ls -al /usr/local/bin
+      #    ls -l /usr/bin
+      #    ls -l /bin
+      #    ls -l /mingw32/
+      #    ls -l /mingw32/bin
+      #    ls -l /c/Msys2
+      - name: test windows
+        run: |
+         dir "C:\Msys2"
+         dir C:\ProgramData\Chocolatey
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
       #    dir "C:\Program Files (x86)"
-      #    dir "C:\Msys2"
+
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
