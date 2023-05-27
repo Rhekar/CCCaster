@@ -19,9 +19,9 @@ jobs:
     # The type of runner that the job will run on
     runs-on: windows-latest
     # Steps represent a sequence of tasks that will be executed as part of the job
-    #defaults:
-    #  run:
-    #    shell: bash.exe {0}
+    defaults:
+      run:
+        shell: bash.exe {0}
     steps:
       #- uses: msys2/setup-msys2@v2
       #  with:
@@ -49,14 +49,16 @@ jobs:
       - name: test windows
         run: |
           choco install winlibs --x86
-          dir "C:\msys64"
-          dir "C:\msys64\mingw32"
-          dir "C:\msys64\mingw32\bin"
-          dir C:\ProgramData\Chocolatey\bin
-          dir C:\ProgramData\chocolatey\lib\mingw\
-          dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
-          choco install tree
-          tree C:\ProgramData\chocolatey\lib\
+          PATH=$PATH:/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin
+          PATH=$PATH:/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/i686-w64-mingw32/bin
+          #dir "C:\msys64"
+          #dir "C:\msys64\mingw32"
+          #dir "C:\msys64\mingw32\bin"
+          #dir C:\ProgramData\Chocolatey\bin
+          #dir C:\ProgramData\chocolatey\lib\mingw\
+          #dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
+          #choco install tree
+          #tree C:\ProgramData\chocolatey\lib\
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
