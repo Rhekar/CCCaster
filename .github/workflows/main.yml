@@ -34,6 +34,7 @@ jobs:
       - name: Run a one-line script
         run: |
           uname
+          pacman -S mingw-w64-i686-toolchain
           echo $PATH
           echo %PATH%
           ls
