@@ -26,6 +26,7 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW32
+          path-type: inherit
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
