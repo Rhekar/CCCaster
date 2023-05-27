@@ -29,11 +29,16 @@ jobs:
       #    path-type: inherit
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+        with:
+         submodules: true
       # Update references
-      - name: Git Sumbodule Update
-        run: |
-          git submodule update --remote --recursive
-
+      #- name: Git Sumbodule Update
+      #  run: |
+      #    git submodule update --remote --recursive
+      - name: Cache choco packages
+        uses: actions/cache@v3
+        with:
+          path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey\winlibs\
       # Runs a single command using the runners shell
       #- name: Run a one-line script
       #  run: |
