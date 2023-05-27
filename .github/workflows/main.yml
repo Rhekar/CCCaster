@@ -40,15 +40,15 @@ jobs:
           #ls -al /usr/local/bin
           ls -l /usr/bin
           ls -l /bin
-          ls -l /c/Msys2
-      - name: test windows
-        run: |
-          dir C:\ProgramData\Chocolatey
-          dir C:\ProgramData\Chocolatey\bin
-          dir C:\
-          dir "C:\Program Files"
-          dir "C:\Program Files (x86)"
-          dir "C:\Msys2"
+      #    ls -l /c/Msys2
+      #- name: test windows
+      #  run: |
+      #    dir C:\ProgramData\Chocolatey
+      #    dir C:\ProgramData\Chocolatey\bin
+      #    dir C:\
+      #    dir "C:\Program Files"
+      #    dir "C:\Program Files (x86)"
+      #    dir "C:\Msys2"
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
