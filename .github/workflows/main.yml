@@ -52,6 +52,8 @@ jobs:
          dir "C:\msys64\mingw32"
          dir "C:\msys64\mingw32\bin"
          dir C:\ProgramData\Chocolatey
+         dir C:\ProgramData\chocolatey\lib\mingw\
+         dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
