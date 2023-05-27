@@ -41,6 +41,8 @@ jobs:
           #ls -al /usr/local/bin
           ls -l /usr/bin
           ls -l /bin
+          ls -l /mingw32/
+          ls -l /mingw32/bin
       #    ls -l /c/Msys2
       #- name: test windows
       #  run: |
