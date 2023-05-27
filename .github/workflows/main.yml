@@ -20,8 +20,8 @@ jobs:
     runs-on: windows-latest
     # Steps represent a sequence of tasks that will be executed as part of the job
     defaults:
-      #run:
-      #  shell: msys2 {0}
+      run:
+        shell: bash.exe {0}
     steps:
       #- uses: msys2/setup-msys2@v2
       #  with:
