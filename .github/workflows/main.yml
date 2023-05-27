@@ -38,6 +38,7 @@ jobs:
       - name: Cache choco packages
         uses: actions/cache@v3
         with:
+          key: key
           path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey\winlibs\
       # Runs a single command using the runners shell
       #- name: Run a one-line script
