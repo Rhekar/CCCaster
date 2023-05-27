@@ -32,7 +32,6 @@ jobs:
           which g++
           where g++
           dir C:\ProgramData\Chocolatey\bin
-          ls /c/ProgramData/Chocolatey/bin/
           dir C:\
           dir "C:\Program Files"
           dir "C:\Program Files (x86)"
