@@ -26,7 +26,12 @@ jobs:
 
       # Runs a single command using the runners shell
       - name: Run a one-line script
-        run: uname
+        run: |
+          uname
+          echo $PATH
+          echo %PATH%
+          which g++
+          where g++
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
