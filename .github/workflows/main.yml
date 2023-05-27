@@ -48,14 +48,15 @@ jobs:
       #    ls -l /c/Msys2
       - name: test windows
         run: |
-         dir "C:\msys64"
-         dir "C:\msys64\mingw32"
-         dir "C:\msys64\mingw32\bin"
-         dir C:\ProgramData\Chocolatey
-         dir C:\ProgramData\chocolatey\lib\mingw\
-         dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
-         choco install tree
-         tree C:\ProgramData\chocolatey\lib\mingw\tools\
+          choco install winlibs --x86
+          dir "C:\msys64"
+          dir "C:\msys64\mingw32"
+          dir "C:\msys64\mingw32\bin"
+          dir C:\ProgramData\Chocolatey\bin
+          dir C:\ProgramData\chocolatey\lib\mingw\
+          dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
+          choco install tree
+          tree C:\ProgramData\chocolatey\lib\mingw\tools\
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
