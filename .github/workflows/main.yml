@@ -33,6 +33,9 @@ jobs:
           where g++
           dir /c/ProgramData/Chocolatey/bin
           ls /c/ProgramData/Chocolatey/bin/
+          dir C:\
+          dir "C:\Program Files"
+          dir "C:\Program Files (x86)"
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
