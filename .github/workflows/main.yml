@@ -59,6 +59,11 @@ jobs:
           #dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
           #choco install tree
           #tree C:\ProgramData\chocolatey\lib\
+      - name: test windowaaaaaa
+        run: |
+          echo $PATH
+          echo %PATH%
+          ls -l /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
