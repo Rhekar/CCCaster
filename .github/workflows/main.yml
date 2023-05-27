@@ -23,27 +23,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            base-devel
-            git
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: |
-          uname
-          echo $PATH
-          echo %PATH%
-          ls
-          ls /mingw64/bin
-          #ls /usr/local/bin
-          ls /usr/bin
-          ls /bin
-          ls /c/Msys2
       - name: test windows
         run: |
           dir C:\ProgramData\Chocolatey
