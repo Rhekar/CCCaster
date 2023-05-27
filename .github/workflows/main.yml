@@ -31,7 +31,7 @@ jobs:
           echo %PATH%
           which g++
           where g++
-          dir /c/ProgramData/Chocolatey/bin
+          dir C:\ProgramData\Chocolatey\bin
           ls /c/ProgramData/Chocolatey/bin/
           dir C:\
           dir "C:\Program Files"
