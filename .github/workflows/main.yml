@@ -49,6 +49,8 @@ jobs:
       - name: test windows
         run: |
          dir "C:\msys64"
+         dir "C:\msys64\mingw32"
+         dir "C:\msys64\mingw32\bin"
          dir C:\ProgramData\Chocolatey
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
