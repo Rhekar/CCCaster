@@ -29,6 +29,11 @@ jobs:
       #    path-type: inherit
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+      # Update references
+      - name: Git Sumbodule Update
+        run: |
+          git pull --recurse-submodules
+          git submodule update --remote --recursive
 
       # Runs a single command using the runners shell
       #- name: Run a one-line script
