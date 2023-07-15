@@ -404,6 +404,8 @@ endif
 pre-build:
 	$(make_version)
 	$(make_protocol)
+	dir
+	cat .depend_master
 	@echo
 	@echo ========== Main-build ==========
 	@echo
