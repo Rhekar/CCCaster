@@ -20,6 +20,7 @@ if [ $? -ne 0 ]; then
     echo "$1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0"
     $1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0
     echo "$1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1"
+    cat tmp_depend1
     $1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1
     $1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0 & \
     $1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1 & \
