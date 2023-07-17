@@ -407,8 +407,6 @@ pre-build:
 	@echo
 	@echo ========== Main-build ==========
 	@echo
-	dir /a:h
-	cat .depend_master
 
 post-build: main-build
 	@echo
