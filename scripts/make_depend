@@ -17,18 +17,13 @@ if [ $? -ne 0 ]; then
 
     echo "Regenerating .depend_$branch"
 
-    echo "$1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0"
-    $1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0
-    echo "$1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1"
-    cat tmp_depend0
     $1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1
     $1 $2 -std=c++11 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0 & \
     $1 $2 -std=c++11 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1 & \
     $1 $2 -std=c++11 -MM tools/*.cpp                     > tmp_depend2 & \
     $1 $2 -std=c++11 -MM targets/*.cpp   targets/*.hpp   > tmp_depend3 & \
     $1 $2 -std=c++11 -MM lib/*.cpp       lib/*.hpp       > tmp_depend4 & \
-    $1 $2 -std=c++11 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5
-        
+    $1 $2 -std=c++11 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5 
     wait
 
     cp /dev/null .depend_$branch
@@ -41,6 +36,7 @@ if [ $? -ne 0 ]; then
         sed -r "s/^([A-Za-z.]+\.o\: )/$type\/lib\/\1/;s/\\\:/:/g"       tmp_depend4 >> .depend_$branch
         sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tests\/\1/;s/\\\:/:/g"     tmp_depend5 >> .depend_$branch
     done
+
     rm -f tmp_depend*
 
     exit 0
