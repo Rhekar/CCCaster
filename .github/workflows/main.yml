@@ -17,7 +17,7 @@ jobs:
   # This workflow contains a single job called "build"
   build:
     # The type of runner that the job will run on
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     # Steps represent a sequence of tasks that will be executed as part of the job
     #defaults:
     #  run:
@@ -35,11 +35,11 @@ jobs:
       #- name: Git Sumbodule Update
       #  run: |
       #    git submodule update --remote --recursive
-      - name: Cache choco packages
-        uses: actions/cache@v3
-        with:
-          key: key
-          path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey\winlibs\
+      #- name: Cache choco packages
+      #  uses: actions/cache@v3
+      #  with:
+      #    key: key
+      #    path: C:\Users\runneradmin\AppData\Local\Temp\chocolatey\winlibs\
       # Runs a single command using the runners shell
       #- name: Run a one-line script
       #  run: |
@@ -56,11 +56,16 @@ jobs:
       #    ls -l /mingw32/
       #    ls -l /mingw32/bin
       #    ls -l /c/Msys2
+      - name: Set up MinGW
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          platform: x86
       - name: test windows
         run: |
-          choco install winlibs --x86
-          choco install rsync make
-          echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin" >> $GITHUB_PATH
+          echo $PATH
+          #choco install winlibs --x86
+          #choco install rsync make
+          #echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin" >> $GITHUB_PATH
           #echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/i686-w64-mingw32/bin" >> $GITHUB_PATH
           #dir "C:\msys64"
           #dir "C:\msys64\mingw32"
