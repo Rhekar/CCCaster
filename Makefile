@@ -1,3 +1,4 @@
+PATH := $(PATH)
 VERSION = 3.1
 SUFFIX = .004
 NAME = cccaster
