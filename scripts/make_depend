@@ -29,8 +29,6 @@ if [ $? -ne 0 ]; then
     $1 $2 -std=c++11 -MM lib/*.cpp       lib/*.hpp       > tmp_depend4 & \
     $1 $2 -std=c++11 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5
         
-    cat tmp_depend1
-    cat tmp_depend2
     wait
 
     cp /dev/null .depend_$branch
@@ -43,8 +41,6 @@ if [ $? -ne 0 ]; then
         sed -r "s/^([A-Za-z.]+\.o\: )/$type\/lib\/\1/;s/\\\:/:/g"       tmp_depend4 >> .depend_$branch
         sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tests\/\1/;s/\\\:/:/g"     tmp_depend5 >> .depend_$branch
     done
-    echo "AAAAA"
-    cat .depend_$branch
     rm -f tmp_depend*
 
     exit 0
