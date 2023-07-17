@@ -407,6 +407,7 @@ pre-build:
 	@echo
 	@echo ========== Main-build ==========
 	@echo
+	@echo $$PATH
 
 post-build: main-build
 	@echo
