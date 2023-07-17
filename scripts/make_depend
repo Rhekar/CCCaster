@@ -23,6 +23,7 @@ if [ $? -ne 0 ]; then
     $1 $2 -std=c++11 -MM targets/*.cpp   targets/*.hpp   > tmp_depend3 & \
     $1 $2 -std=c++11 -MM lib/*.cpp       lib/*.hpp       > tmp_depend4 & \
     $1 $2 -std=c++11 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5
+
     wait
 
     cp /dev/null .depend_$branch
