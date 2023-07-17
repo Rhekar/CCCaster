@@ -411,7 +411,7 @@ pre-build:
 	@echo
 	@echo $$PATH
 	dir
-	cp /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin/i686-w64-mingw32-g++ .
+	/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin/i686-w64-mingw32-g++
 	dir
 
 post-build: main-build
