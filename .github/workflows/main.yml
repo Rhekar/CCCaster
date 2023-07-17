@@ -59,6 +59,7 @@ jobs:
       - name: test windows
         run: |
           choco install winlibs --x86
+          choco install rsync make
           echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin" >> $GITHUB_PATH
           #echo "/c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/i686-w64-mingw32/bin" >> $GITHUB_PATH
           #dir "C:\msys64"
@@ -69,12 +70,12 @@ jobs:
           #dir C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin
           #choco install tree
           #tree C:\ProgramData\chocolatey\lib\
-      - name: test windowaaaaaa
-        run: |
-          echo $PATH
-          echo %PATH%
-          ls -l /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin
-          which i686-w64-mingw32-g++
+      #- name: test windowaaaaaa
+      #  run: |
+      #    echo $PATH
+      #    echo %PATH%
+      #    ls -l /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin
+      #    which i686-w64-mingw32-g++
       #    dir C:\ProgramData\Chocolatey\bin
       #    dir C:\
       #    dir "C:\Program Files"
@@ -83,17 +84,17 @@ jobs:
       # Setup build functions
       #- name: Set up MinGW
       #  uses: egor-tensin/setup-mingw@v2
-      - name: Install Tools
-        uses: crazy-max/ghaction-chocolatey@v2
-        with:
-          args: install rsync make mingw
+      #- name: Install Tools
+      #  uses: crazy-max/ghaction-chocolatey@v2
+      #  with:
+      #    args: install rsync make mingw
       # Runs a set of commands using the runners shell
       - name: Run a multi-line script
         run: |
           which i686-w64-mingw32-g++
           make release -i
       # post debug
-      - name: Post Debug
-        run: |
-          dir
-          cat .depend_master
+      #- name: Post Debug
+      #  run: |
+      #    dir
+      #    cat .depend_master
