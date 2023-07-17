@@ -56,6 +56,7 @@ DLL_OBJECTS = $(DLL_CPP_SRCS:.cpp=.o) $(HOOK_CC_SRCS:.cc=.o) $(HOOK_C_SRCS:.c=.o
 
 # Tool chain
 PREFIX = /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin/i686-w64-mingw32-
+PREFIX = i686-w64-mingw32-
 GCC = $(PREFIX)gcc
 CXX = $(PREFIX)g++
 WINDRES = windres
@@ -409,9 +410,6 @@ pre-build:
 	@echo
 	@echo ========== Main-build ==========
 	@echo
-	@echo $$PATH
-	dir
-	dir
 
 post-build: main-build
 	@echo
