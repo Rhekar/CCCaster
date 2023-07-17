@@ -1,3 +1,4 @@
+SHELL := /bin/bash
 PATH := $(PATH)
 VERSION = 3.1
 SUFFIX = .004
