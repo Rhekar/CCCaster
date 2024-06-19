@@ -1296,8 +1296,8 @@ struct MainApp
         }
 
 #ifndef RELEASE
-        if ( ! options[Options::StrictVersion] )
-            options.set ( Options::StrictVersion, 3 );
+        //if ( ! options[Options::StrictVersion] )
+        //    options.set ( Options::StrictVersion, 3 );
 #endif
 
         if ( clientMode.isNetplay() )

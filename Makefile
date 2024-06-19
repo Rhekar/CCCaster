@@ -1,7 +1,9 @@
+#SHELL := /bin/bash
+PATH := /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin/:$(PATH)
 VERSION = 3.1
-SUFFIX = .004
+SUFFIX = .005
 NAME = cccaster
-TAG =
+TAG = beta.1
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 ifneq ($(TAG),)
@@ -54,6 +56,7 @@ DLL_OBJECTS = $(DLL_CPP_SRCS:.cpp=.o) $(HOOK_CC_SRCS:.cc=.o) $(HOOK_C_SRCS:.c=.o
 
 # Tool chain
 PREFIX = i686-w64-mingw32-
+#PREFIX = /c/ProgramData/chocolatey/lib/winlibs/tools/mingw32/bin/i686-w64-mingw32-
 GCC = $(PREFIX)gcc
 CXX = $(PREFIX)g++
 WINDRES = windres
@@ -159,6 +162,7 @@ endif
 
 $(BINARY): $(addprefix $(BUILD_PREFIX)/,$(MAIN_OBJECTS)) res/icon.res
 	rm -f $(filter-out $(BINARY),$(wildcard $(NAME)*.exe))
+	echo "AAAA"
 	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++11 $^ $(LD_FLAGS)
 	@echo
 	$(STRIP) $@
@@ -166,6 +170,7 @@ $(BINARY): $(addprefix $(BUILD_PREFIX)/,$(MAIN_OBJECTS)) res/icon.res
 	@echo
 
 $(FOLDER)/$(DLL): $(addprefix $(BUILD_PREFIX)/,$(DLL_OBJECTS)) res/rollback.o targets/CallDraw.s | $(FOLDER)
+	echo "BBBB"
 	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++11 $^ -shared $(LD_FLAGS) -ld3dx9
 	@echo
 	$(STRIP) $@
@@ -173,6 +178,7 @@ $(FOLDER)/$(DLL): $(addprefix $(BUILD_PREFIX)/,$(DLL_OBJECTS)) res/rollback.o ta
 	@echo
 
 $(FOLDER)/$(LAUNCHER): tools/Launcher.cpp | $(FOLDER)
+	echo "CCC"
 	$(CXX) -o $@ $^ -m32 -s -Os -O2 -Wall -static -mwindows
 	@echo
 	$(STRIP) $@
@@ -407,6 +413,7 @@ pre-build:
 	@echo
 	@echo ========== Main-build ==========
 	@echo
+	@echo $$PATH
 
 post-build: main-build
 	@echo

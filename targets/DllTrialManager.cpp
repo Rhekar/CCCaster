@@ -6,12 +6,12 @@
 #include "DllNetplayManager.hpp"
 #include "ProcessManager.hpp"
 #include "StringUtils.hpp"
-#include "Shlwapi.h"
 #include "Sequences.hpp"
 
 #include <fstream>
 #include <locale>
 #include <codecvt>
+#include <shlwapi.h>
 #include <string>
 #include <windows.h>
 #include <mmsystem.h>

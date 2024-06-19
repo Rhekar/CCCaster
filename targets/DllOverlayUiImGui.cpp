@@ -101,8 +101,8 @@ void EndScene ( IDirect3DDevice9 *device ) {
         ImGui::Text("Is screen focused? %s", isFocused ? "Yes" : "No");
         ImGui::Text("Position: %f, %f", mousePositionRelative.x, mousePositionRelative.y);
 
-        ImGui::Text("h = %d %d", ImGui::IsKeyPressed('h'), GetAsyncKeyState(0x48));
-        ImGui::Text("h = %d %d", ImGui::IsKeyPressed('h'), GetAsyncKeyState(VK_LBUTTON));
+        //ImGui::Text("h = %d %d", ImGui::IsKeyPressed('h'), GetAsyncKeyState(0x48));
+        //ImGui::Text("h = %d %d", ImGui::IsKeyPressed('h'), GetAsyncKeyState(VK_LBUTTON));
         ImGui::Text("Mouse clicked: %s", ImGui::IsMouseDown(ImGuiMouseButton_Left) ? "Yes" : "No");
 
         ImGui::Text("Mouse clicked: %s", ImGui::IsMouseDown(ImGuiMouseButton_Left) ? "Yes" : "No");

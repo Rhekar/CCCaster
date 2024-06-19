@@ -327,10 +327,13 @@ uint16_t NetplayManager::getRetryMenuInput ( uint8_t player )
         if ( AsmHacks::currentMenuIndex > MAX_RETRY_MENU_INDEX )
             input &= ~ COMBINE_INPUT ( 0, CC_BUTTON_A | CC_BUTTON_CONFIRM );
     }
+    LOG( "INPUT" );
+    LOG( input );
 
     // Check if auto replay save is enabled
     if ( *CC_AUTO_REPLAY_SAVE_ADDR && AsmHacks::autoReplaySaveStatePtr )
     {
+        LOG( "REPLAYON" );
         // Prevent mashing through the auto replay save and causing a hang
         if ( *AsmHacks::autoReplaySaveStatePtr == 100 )
             return 0;
@@ -339,6 +342,7 @@ uint16_t NetplayManager::getRetryMenuInput ( uint8_t player )
     // Allow saving replays; when manual replay save is selected or any replay save menu is open
     if ( AsmHacks::currentMenuIndex == 2 || *CC_MENU_STATE_COUNTER_ADDR > _retryMenuStateCounter )
     {
+        LOG( "CMI2" );
         AsmHacks::menuConfirmState = 2;
         return input;
     }
@@ -350,14 +354,18 @@ uint16_t NetplayManager::getRetryMenuInput ( uint8_t player )
 
         // Get the retry menu index for the current transition index
         MsgPtr msgMenuIndex = getRetryMenuIndex ( getIndex() );
+        LOG( "MMI" );
+        LOG( msgMenuIndex );
 
         // Check if we're done auto-saving (or not auto-saving)
         const bool doneAutoSave = ! ( *CC_AUTO_REPLAY_SAVE_ADDR )
                                   || ( AsmHacks::autoReplaySaveStatePtr && *AsmHacks::autoReplaySaveStatePtr > 100 );
 
+        LOG( doneAutoSave );
         // Navigate the menu when the menu index is ready AND we're done auto-saving
         if ( msgMenuIndex && doneAutoSave )
         {
+            LOG( "waiting" );
             _targetMenuState = 0;
             _targetMenuIndex = msgMenuIndex->getAs<MenuIndex>().menuIndex;
             return 0;
@@ -395,6 +403,7 @@ uint16_t NetplayManager::getRetryMenuInput ( uint8_t player )
         AsmHacks::menuConfirmState = 2;
     }
 
+    LOG( input );
     return input;
 }
 

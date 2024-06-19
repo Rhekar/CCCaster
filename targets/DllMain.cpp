@@ -243,13 +243,16 @@ struct DllMain
                     if ( doneSkipping && remoteIndexedFrame.value > netMan.getIndexedFrame().value + 2 * NUM_INPUTS )
                     {
                         uint32_t framesToSkip = remoteIndexedFrame.value - (netMan.getIndexedFrame().value + 2 * NUM_INPUTS) - 1;
+                        framesToSkip = 5;
                         *CC_SKIP_FRAMES_ADDR = framesToSkip;
                         doneSkipping = false;
                     }
                     else if ( !doneSkipping && *CC_SKIP_FRAMES_ADDR == 0 )
                     {
                         doneSkipping = true;
-                        spectateHardSync = false;
+                        if (remoteIndexedFrame.value <= netMan.getIndexedFrame().value + 2 * NUM_INPUTS) {
+                            spectateHardSync = false;
+                        }
                     }
                 }
 
@@ -505,6 +508,13 @@ struct DllMain
                 else if ( clientMode.isLocal() )
                 {
                     netMan.setInput ( remotePlayer, localInputs[1] );
+                    if ( clientMode.isBroadcast() && netMan.getState() == NetplayState::RetryMenu ) {
+                        MsgPtr msgMenuIndex = netMan.getLocalRetryMenuIndex();
+                        if ( msgMenuIndex && !localRetryMenuIndexSent ) {
+                            localRetryMenuIndexSent = true;
+                            dataSocket->send ( msgMenuIndex );
+                        }
+                    }
                 }
 
                 if ( shouldSyncRngState && ( clientMode.isHost() || clientMode.isBroadcast() ) )
