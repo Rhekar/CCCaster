@@ -1,3 +1,6 @@
+v3.1.005
+- Fixed Broadcast mode
+
 v3.1.004
 - Updated relay.txt
 - Minor ui fixes
