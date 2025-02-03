@@ -29,12 +29,12 @@ if [ $? -ne 0 ]; then
     cp /dev/null .depend_$branch
 
     for type in build_debug_$branch build_release_$branch build_logging_$branch; do
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/sequences\/\1/" tmp_depend0 >> .depend_$branch
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/netplay\/\1/"   tmp_depend1 >> .depend_$branch
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tools\/\1/"     tmp_depend2 >> .depend_$branch
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/targets\/\1/"   tmp_depend3 >> .depend_$branch
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/lib\/\1/"       tmp_depend4 >> .depend_$branch
-        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tests\/\1/"     tmp_depend5 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/sequences\/\1/;s/\\\:/:/g" tmp_depend0 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/netplay\/\1/;s/\\\:/:/g"   tmp_depend1 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tools\/\1/;s/\\\:/:/g"     tmp_depend2 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/targets\/\1/;s/\\\:/:/g"   tmp_depend3 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/lib\/\1/;s/\\\:/:/g"       tmp_depend4 >> .depend_$branch
+        sed -r "s/^([A-Za-z.]+\.o\: )/$type\/tests\/\1/;s/\\\:/:/g"     tmp_depend5 >> .depend_$branch
     done
 
     rm -f tmp_depend*
