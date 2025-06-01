@@ -552,6 +552,12 @@ static const AsmList disableHealthBars =
     //{ ( void * ) 0x424E03, { 0xE9, 0x4B, 0x04, 0x00, 0x00, 0x90 } }, // jmp 00425253
 };
 
+// Disable the scroll lock autoscreenshot
+static const AsmList disableScreenshot =
+{
+    { ( void * ) 0x432Cf9, INLINE_NOP_FIVE_TIMES }, // takeScreenshot->nop
+};
+
 extern "C" void addExtraDrawCallsCb();
 
 static const AsmList addExtraDraws =

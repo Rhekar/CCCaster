@@ -60,6 +60,7 @@ void initializePreLoad()
     WRITE_ASM_HACK ( hijackEscapeKey );
     WRITE_ASM_HACK ( disableTrainingMusicReset );
     WRITE_ASM_HACK ( fixBossStageSuperFlashOverlay );
+    WRITE_ASM_HACK ( disableScreenshot );
 
     // TODO color hijack is temporary disabled due to some issues
     //
