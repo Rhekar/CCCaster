@@ -66,3 +66,15 @@ Running under Wine:
         No in-game button config unless someone can figure out how to hook DirectX9 under Wine.
 
         Can't save replays because MBAA.exe crashes when saving replays under Wine.
+
+
+Building:
+
+    Requirements:
+        * Wine
+        * MingW
+        * make
+
+    1. Clone the repository
+    2. Run `git submodule update --init --recursive` to pull the necessary dependencies
+    3. Run `make -j$(nproc)`
