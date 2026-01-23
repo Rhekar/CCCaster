@@ -1,12 +1,27 @@
+
+
 #include "DllFrameRate.hpp"
 #include "TimerManager.hpp"
 #include "Constants.hpp"
 #include "ProcessManager.hpp"
 #include "DllAsmHacks.hpp"
 
+#include <timeapi.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#include <chrono>
+#pragma GCC diagnostic pop
+
 #include <d3dx9.h>
 
-using namespace std;
+long long getMicroSec() {
+	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+}
+
+//using namespace std;
 using namespace DllFrameRate;
 
 
@@ -37,17 +52,16 @@ void enable()
 }
 
 
-void PresentFrameEnd ( IDirect3DDevice9 *device )
-{
-    if ( !isEnabled || *CC_SKIP_FRAMES_ADDR )
-        return;
+
+void oldCasterFrameLimiter() {
 
     static uint64_t last1f = 0, last5f = 0, last30f = 0, last60f = 0;
     static uint8_t counter = 0;
-
+    
     ++counter;
 
     uint64_t now = TimerManager::get().getNow ( true );
+    
 
     /**
      * The best timer resolution is only in milliseconds, and we need to make
@@ -56,7 +70,8 @@ void PresentFrameEnd ( IDirect3DDevice9 *device )
      * What this code does is check every 30f, 5f, and 1f how many milliseconds have
      * passed since the last check and make sure we are close to or under the desired FPS.
      */
-    if ( counter % 30 == 0 )
+    
+     if ( counter % 30 == 0 )
     {
         while ( now - last30f < ( 30 * 1000 ) / desiredFps )
             now = TimerManager::get().getNow ( true );
@@ -89,4 +104,66 @@ void PresentFrameEnd ( IDirect3DDevice9 *device )
         counter = 0;
         last60f = now;
     }
+
+    
+}
+
+void newCasterFrameLimiter() {
+
+    // ive been thinking.
+
+    static bool isFirstRun = true;
+    if(isFirstRun) { 
+        // this is bad code, ideally, i just set the timer res in main, but that would possibly mess up things when this fps method is not selected
+        isFirstRun = false;
+        timeBeginPeriod(1); 
+    }
+    
+    static long long prevFrameTime = 0;
+
+    long long curTime = getMicroSec();
+
+    if(prevFrameTime == 0) {
+        prevFrameTime = curTime;
+        return;
+    }
+
+    long long delta = curTime - prevFrameTime;
+
+    long long lim = 16666;
+    //long long lim = 16000; // melty being at ~62fps instead of 60 could be explained by going with .016 instead of .01666
+
+    if(delta > lim) { // 16.66ms
+        prevFrameTime = curTime;
+        return;
+    }
+
+    /*
+    // the previous sleep option is also busy, i see no reason to change that
+    long long needSleep = lim - delta;
+    needSleep /= 1000; // convert to ms
+    needSleep - 3; // minus 1 here bc the scheduler is set to that time period. actually, minus 2 bc paranoia
+    if(needSleep > 0) {
+        Sleep(needSleep); 
+    }
+    */
+    
+    while(delta < lim) {
+        curTime = getMicroSec();
+        delta = curTime - prevFrameTime;
+    }
+
+    prevFrameTime = curTime;
+    
+}
+
+void PresentFrameEnd ( IDirect3DDevice9 *device )
+{
+    if ( !isEnabled || *CC_SKIP_FRAMES_ADDR )
+        return;
+
+    //oldCasterFrameLimiter();
+    newCasterFrameLimiter();
+
+    
 }
