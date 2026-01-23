@@ -1,3 +1,7 @@
+v3.1.006
+- Disabled scroll lock taking a screenshot every frame
+- Added: Custom Pallette support in cccaster/palettes (by Inana)
+
 v3.1.005
 - Fixed Broadcast mode (thanks Inana)
 
