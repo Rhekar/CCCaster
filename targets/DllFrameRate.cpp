@@ -19,6 +19,7 @@
 
 long long getMicroSec() {
 	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    //return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 //using namespace std;
@@ -50,8 +51,6 @@ void enable()
 }
 
 }
-
-
 
 void oldCasterFrameLimiter() {
 
@@ -111,16 +110,8 @@ void oldCasterFrameLimiter() {
 void newCasterFrameLimiter() {
 
     // ive been thinking.
-
-    static bool isFirstRun = true;
-    if(isFirstRun) { 
-        // this is bad code, ideally, i just set the timer res in main, but that would possibly mess up things when this fps method is not selected
-        isFirstRun = false;
-        timeBeginPeriod(1); 
-    }
     
     static long long prevFrameTime = 0;
-
     long long curTime = getMicroSec();
 
     if(prevFrameTime == 0) {
@@ -131,24 +122,9 @@ void newCasterFrameLimiter() {
     long long delta = curTime - prevFrameTime;
 
     constexpr double desiredFPS = 60.0;
-    constexpr long long lim = ((1.0 / desiredFPS) * 1000000.0);
+    constexpr long long lim = 1000000.0 / desiredFPS;
     //long long lim = 16000; // melty being at ~62fps instead of 60 could be explained by going with .016 instead of .01666
 
-    if(delta > lim) { // 16.66ms
-        prevFrameTime = curTime;
-        return;
-    }
-
-    /*
-    // the previous sleep option is also busy, i see no reason to change that
-    long long needSleep = lim - delta;
-    needSleep /= 1000; // convert to ms
-    needSleep - 3; // minus 1 here bc the scheduler is set to that time period. actually, minus 2 bc paranoia
-    if(needSleep > 0) {
-        Sleep(needSleep); 
-    }
-    */
-    
     while(delta < lim) {
         curTime = getMicroSec();
         delta = curTime - prevFrameTime;
