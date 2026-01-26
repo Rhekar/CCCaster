@@ -121,8 +121,7 @@ void newCasterFrameLimiter() {
 
     long long delta = curTime - prevFrameTime;
 
-    constexpr double desiredFPS = 60.0;
-    constexpr long long lim = 1000000.0 / desiredFPS;
+    long long lim = 1000000.0 / desiredFps;
     //long long lim = 16000; // melty being at ~62fps instead of 60 could be explained by going with .016 instead of .01666
 
     while(delta < lim) {
