@@ -114,7 +114,9 @@ void newCasterFrameLimiter() {
     static long long prevFrameTime = 0;
     long long curTime = getMicroSec();
 
-    if(prevFrameTime == 0) {
+    static bool isFirstRun = true;
+    if(isFirstRun) {
+        isFirstRun = false;
         prevFrameTime = curTime;
         return;
     }
@@ -131,6 +133,19 @@ void newCasterFrameLimiter() {
 
     prevFrameTime = curTime;
     
+}
+
+void newerCasterFrameLimiter() {
+
+    // try using queryperfcounter
+    // move it somewhere other than right after presentframeend
+
+
+
+
+
+
+
 }
 
 void PresentFrameEnd ( IDirect3DDevice9 *device )
