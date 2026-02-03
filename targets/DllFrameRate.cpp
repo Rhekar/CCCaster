@@ -147,15 +147,21 @@ void newerCasterFrameLimiter() {
 	static LARGE_INTEGER freq; // this is the amount of ticks for one frame
 	static LARGE_INTEGER prevFrameTime;
 
+
 	static bool isFirstRun = true;
 	if(isFirstRun) {
 		isFirstRun = false;
 		
 		LARGE_INTEGER temp;
-		QueryPerformanceFrequency(&temp);
+		QueryPerformanceFrequency(&temp); // i need to handle errors here, and maybe fallback to a different system. is this guarenteed to have enough resolution?
 		freq.QuadPart = temp.QuadPart / 60;
 
 		prevFrameTime.QuadPart = 0;
+
+		// this,,, might be unsafe and stupid
+		// by default melty seems to run at high
+		// this didnt seem to work for some reason
+		//omfg = SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
 	}
 
 	LARGE_INTEGER currTime;
