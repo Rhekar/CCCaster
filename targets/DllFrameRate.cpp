@@ -12,6 +12,7 @@
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wextra"
 #pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wconversion"
 #include <chrono>
 #pragma GCC diagnostic pop
 
@@ -140,12 +141,33 @@ void newerCasterFrameLimiter() {
     // try using queryperfcounter
     // move it somewhere other than right after presentframeend
 
+	// i could be converting time to doubles, but that fucks precision. this is less readable, but (hopefully) better
+	// the issue is that whatever is causing this bs is related to QueryPerformanceCounter
 
+	static LARGE_INTEGER freq; // this is the amount of ticks for one frame
+	static LARGE_INTEGER prevFrameTime;
 
+	static bool isFirstRun = true;
+	if(isFirstRun) {
+		isFirstRun = false;
+		
+		LARGE_INTEGER temp;
+		QueryPerformanceFrequency(&temp);
+		freq.QuadPart = temp.QuadPart / 60;
 
+		prevFrameTime.QuadPart = 0;
+	}
 
+	LARGE_INTEGER currTime;
 
+	while(true) {
+		QueryPerformanceCounter(&currTime);
+		if(currTime.QuadPart - prevFrameTime.QuadPart > freq.QuadPart) {
+			break;
+		}
+	}
 
+	prevFrameTime.QuadPart = currTime.QuadPart;
 }
 
 void PresentFrameEnd ( IDirect3DDevice9 *device )
@@ -154,7 +176,8 @@ void PresentFrameEnd ( IDirect3DDevice9 *device )
         return;
 
     //oldCasterFrameLimiter();
-    newCasterFrameLimiter();
+    //newCasterFrameLimiter();
+	newerCasterFrameLimiter();
 
     
 }
