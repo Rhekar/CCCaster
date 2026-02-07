@@ -8,6 +8,7 @@
 
 #include <timeapi.h>
 
+/*
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wextra"
@@ -16,12 +17,15 @@
 #include <chrono>
 #pragma GCC diagnostic pop
 
-#include <d3dx9.h>
-
 long long getMicroSec() {
 	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
     //return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+*/
+
+#include <d3dx9.h>
+
+
 
 //using namespace std;
 using namespace DllFrameRate;
@@ -42,15 +46,22 @@ void enable()
     if ( isEnabled )
         return;
 
+	// this runs regardless of the setting in caster. why. 
+
     // TODO find an alternative because this doesn't work on Wine
     WRITE_ASM_HACK ( AsmHacks::disableFpsLimit );
     WRITE_ASM_HACK ( AsmHacks::disableFpsCounter );
 
+	// this will call limitfps after present (and the stuff which hooks onto present) exits
+	// it might be better? but it makes my frame counter look worse, for obvious reasons
+	for ( const AsmHacks::Asm& hack : AsmHacks::hookPresentCaller ) {
+		//WRITE_ASM_HACK ( hack );
+	}
+
+
     isEnabled = true;
 
     LOG ( "Enabling FPS control!" );
-}
-
 }
 
 void oldCasterFrameLimiter() {
@@ -110,59 +121,26 @@ void oldCasterFrameLimiter() {
 
 void newCasterFrameLimiter() {
 
-    // ive been thinking.
-    
-    static long long prevFrameTime = 0;
-    long long curTime = getMicroSec();
-
-    static bool isFirstRun = true;
-    if(isFirstRun) {
-        isFirstRun = false;
-        prevFrameTime = curTime;
-        return;
-    }
-
-    long long delta = curTime - prevFrameTime;
-
-    long long lim = 1000000.0 / desiredFps;
-    //long long lim = 16000; // melty being at ~62fps instead of 60 could be explained by going with .016 instead of .01666
-
-    while(delta < lim) {
-        curTime = getMicroSec();
-        delta = curTime - prevFrameTime;
-    }
-
-    prevFrameTime = curTime;
-    
-}
-
-void newerCasterFrameLimiter() {
-
     // try using queryperfcounter
     // move it somewhere other than right after presentframeend
 
 	// i could be converting time to doubles, but that fucks precision. this is less readable, but (hopefully) better
 	// the issue is that whatever is causing this bs is related to QueryPerformanceCounter
 
+	static LARGE_INTEGER baseFreq;
 	static LARGE_INTEGER freq; // this is the amount of ticks for one frame
 	static LARGE_INTEGER prevFrameTime;
-
 
 	static bool isFirstRun = true;
 	if(isFirstRun) {
 		isFirstRun = false;
-		
-		LARGE_INTEGER temp;
-		QueryPerformanceFrequency(&temp); // i need to handle errors here, and maybe fallback to a different system. is this guarenteed to have enough resolution?
-		freq.QuadPart = temp.QuadPart / 60;
+
+		QueryPerformanceFrequency(&baseFreq); // i need to handle errors here, and maybe fallback to a different system. is this guarenteed to have enough resolution?
 
 		prevFrameTime.QuadPart = 0;
-
-		// this,,, might be unsafe and stupid
-		// by default melty seems to run at high
-		// this didnt seem to work for some reason
-		//omfg = SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
 	}
+
+	freq.QuadPart = baseFreq.QuadPart / desiredFps; // hopefully this doesnt mess things up? this desiredfps var isnt touched anywhere really
 
 	LARGE_INTEGER currTime;
 
@@ -173,17 +151,29 @@ void newerCasterFrameLimiter() {
 		}
 	}
 
+	uint32_t temp = (baseFreq.QuadPart) / (currTime.QuadPart - prevFrameTime.QuadPart - 1); // minus one is there to display 60, not 59.999999
+	
+	*CC_FPS_COUNTER_ADDR = temp;
+
 	prevFrameTime.QuadPart = currTime.QuadPart;
+
+
+}
+
+void limitFPS() {
+
+	if ( !isEnabled || *CC_SKIP_FRAMES_ADDR )
+        return;
+
+	//oldCasterFrameLimiter();
+	newCasterFrameLimiter();
+
+}
+
 }
 
 void PresentFrameEnd ( IDirect3DDevice9 *device )
 {
-    if ( !isEnabled || *CC_SKIP_FRAMES_ADDR )
-        return;
-
-    //oldCasterFrameLimiter();
-    //newCasterFrameLimiter();
-	newerCasterFrameLimiter();
-
-    
+	// comment this out if you uncommented the hookPresentCaller hack
+	DllFrameRate::limitFPS();
 }

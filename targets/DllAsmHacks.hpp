@@ -230,6 +230,14 @@ static const Asm disableFpsLimit = { CC_PERF_FREQ_ADDR, { INLINE_DWORD ( 1 ), IN
 // Disable the code that updates the FPS counter
 static const Asm disableFpsCounter = { ( void * ) 0x41FD43, INLINE_NOP_THREE_TIMES };
 
+__attribute__((naked, noinline)) void _naked_presentFuncCaller();
+
+static const AsmList hookPresentCaller = { // rets taken from func 0x004bdbc0
+	PATCHJUMP(0x004bdd4a, _naked_presentFuncCaller),
+	PATCHJUMP(0x004bdd6c, _naked_presentFuncCaller),
+	PATCHJUMP(0x004bdd9d, _naked_presentFuncCaller)
+};
+
 // Disable normal joystick and keyboard controls
 static const AsmList hijackControls =
 {
