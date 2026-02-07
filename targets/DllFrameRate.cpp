@@ -1,5 +1,3 @@
-
-
 #include "DllFrameRate.hpp"
 #include "TimerManager.hpp"
 #include "Constants.hpp"
@@ -8,28 +6,10 @@
 
 #include <timeapi.h>
 
-/*
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wconversion"
-#include <chrono>
-#pragma GCC diagnostic pop
-
-long long getMicroSec() {
-	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    //return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-*/
-
 #include <d3dx9.h>
-
-
 
 //using namespace std;
 using namespace DllFrameRate;
-
 
 namespace DllFrameRate
 {
@@ -39,7 +19,6 @@ double desiredFps = 60.0;
 double actualFps = 60.0;
 
 bool isEnabled = false;
-
 
 void enable()
 {
@@ -58,7 +37,6 @@ void enable()
 		//WRITE_ASM_HACK ( hack );
 	}
 
-
     isEnabled = true;
 
     LOG ( "Enabling FPS control!" );
@@ -73,7 +51,6 @@ void oldCasterFrameLimiter() {
 
     uint64_t now = TimerManager::get().getNow ( true );
     
-
     /**
      * The best timer resolution is only in milliseconds, and we need to make
      * sure the spacing between frames is as close to even as possible.
@@ -120,15 +97,9 @@ void oldCasterFrameLimiter() {
 }
 
 void newCasterFrameLimiter() {
-
-    // try using queryperfcounter
-    // move it somewhere other than right after presentframeend
-
-	// i could be converting time to doubles, but that fucks precision. this is less readable, but (hopefully) better
-	// the issue is that whatever is causing this bs is related to QueryPerformanceCounter
-
+	
 	static LARGE_INTEGER baseFreq;
-	static LARGE_INTEGER freq; // this is the amount of ticks for one frame
+	static LARGE_INTEGER freq; 
 	static LARGE_INTEGER prevFrameTime;
 
 	static bool isFirstRun = true;
@@ -156,8 +127,6 @@ void newCasterFrameLimiter() {
 	*CC_FPS_COUNTER_ADDR = temp;
 
 	prevFrameTime.QuadPart = currTime.QuadPart;
-
-
 }
 
 void limitFPS() {
