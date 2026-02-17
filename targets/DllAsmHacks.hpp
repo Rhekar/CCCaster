@@ -561,10 +561,7 @@ static const AsmList disableHealthBars =
 };
 
 // Disable the scroll lock autoscreenshot
-static const AsmList disableScreenshot =
-{
-    { ( void * ) 0x432Cf9, INLINE_NOP_FIVE_TIMES }, // takeScreenshot->nop
-};
+static const Asm disableScreenshot = { ( void * ) 0x432Cf9, INLINE_NOP_FIVE_TIMES }; // takeScreenshot->nop
 
 extern "C" void addExtraDrawCallsCb();
 
