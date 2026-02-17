@@ -1899,8 +1899,11 @@ struct DllMain
                     // Manually control intro state
                     WRITE_ASM_HACK ( AsmHacks::hijackIntroState );
 
-                    // Disable stage animations (TODO)
-                    *CC_STAGE_ANIMATION_OFF_ADDR = 1;
+                    // Disable stage animations
+                    if ( options[Options::StageAnimations] )
+                    {
+                        *CC_STAGE_ANIMATION_OFF_ADDR = 1;
+                    }
                 }
 
                 if ( netMan.autoReplaySave )
