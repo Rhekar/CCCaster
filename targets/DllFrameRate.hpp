@@ -12,4 +12,6 @@ extern double actualFps;
 
 void enable();
 
+void limitFPS();
+
 }

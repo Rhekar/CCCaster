@@ -4,6 +4,7 @@
 #include "CharacterSelect.hpp"
 #include "Logger.hpp"
 #include "DllTrialManager.hpp"
+#include "DllFrameRate.hpp"
 
 #include <windows.h>
 #include <d3dx9.h>
@@ -580,6 +581,32 @@ void _naked_paletteCallback() {
     POP_ALL;
 
     ASMRET;
+}
+
+void presentFuncCaller() {
+	DllFrameRate::limitFPS();
+}
+
+void _naked_presentFuncCaller() {
+
+	PUSH_ALL;
+	
+	presentFuncCaller();
+
+	POP_ALL;
+
+	// asm overwritten fom 004bdd9d
+	// emiting bytes bc compilers are a bitch sometimes
+
+	emitByte(0x5E); // POP        ESI
+	emitByte(0x5B); // POP        EBX
+	emitByte(0x8B); // MOV        ESP,EBP
+	emitByte(0xe5);
+	emitByte(0x5D); // POP        EBP
+	emitByte(0xC2); // RET        0x4
+	emitByte(0x04);
+	emitByte(0x00);
+
 }
 
 // -----
