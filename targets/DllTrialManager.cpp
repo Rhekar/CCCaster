@@ -1566,8 +1566,6 @@ void DllTrialManager::render()
     //drawiidx();
     if ( TrialManager::inputGuideEnabled )
         drawInputGuide();
-    if ( ProcessManager::isWine() )
-        drawWineOverlay();
     if ( TrialManager::inputEditorEnabled )
         drawInputEditor();
 }
