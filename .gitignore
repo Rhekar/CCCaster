@@ -27,3 +27,7 @@ TAGS
 *.png
 scripts/seqlists*
 debugging
+CLAUDE.local.md
+spike/
+scripts/.recipe-shell.sh
+.env

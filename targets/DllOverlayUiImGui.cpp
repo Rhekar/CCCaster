@@ -18,6 +18,13 @@ extern bool doEndScene;
 extern bool initalizedDirectX;
 
 void initImGui( IDirect3DDevice9 *device ) {
+    // Initialize the ImGui context + backends only once. On a device reset the device pointer is
+    // unchanged (the game calls IDirect3DDevice9::Reset, not a recreate) and only its resources are
+    // lost, so we must NOT recreate the context here -- that would leak it and re-bind the backend.
+    // The device objects are recreated lazily by ImGui_ImplDX9_NewFrame() after invalidation.
+    if ( context )
+        return;
+
     IMGUI_CHECKVERSION();
     context = ImGui::CreateContext();
     void* windowHandle = ProcessManager::findWindow ( CC_TITLE );

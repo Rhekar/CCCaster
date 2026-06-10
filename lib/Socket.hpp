@@ -53,7 +53,7 @@ public:
     };
 
     // Socket protocol
-    ENUM ( Protocol, TCP, UDP, Smart );
+    ENUM ( Protocol, TCP, UDP, Smart, Steam );
 
     // Connection state
     ENUM ( State, Listening, Connecting, Connected, Disconnected );
@@ -82,6 +82,7 @@ public:
     bool isTCP() const { return ( protocol == Protocol::TCP ); }
     bool isUDP() const { return ( protocol == Protocol::UDP ); }
     bool isSmart() const { return ( protocol == Protocol::Smart ); }
+    bool isSteam() const { return ( protocol == Protocol::Steam ); }
     bool gotGoodRead() const { return _gotGoodRead; }
     virtual State getState() const { return _state; }
     virtual bool isConnecting() const { return isClient() && ( _state == State::Connecting ); }

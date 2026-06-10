@@ -378,8 +378,17 @@ ConsoleUi::ConsoleUi ( const string& title, bool isWine )
     // Get handle
     HANDLE handle = GetStdHandle ( STD_OUTPUT_HANDLE );
 
+    // These undocumented console-font APIs are absent on modern Windows: GetProcAddress returns
+    // null (calling through it would crash) or GetNumberOfConsoleFonts returns 0. Skip the font
+    // tweak in that case rather than indexing an empty vector (which also trips _GLIBCXX_DEBUG).
+    if ( ! SetConsoleFont || ! GetConsoleFontInfo || ! GetNumberOfConsoleFonts )
+        return;
+
     // Get Number of console fonts
     DWORD numFounts = GetNumberOfConsoleFonts();
+
+    if ( numFounts == 0 )
+        return;
 
     // Setup array
     vector<CONSOLE_FONT_INFO> fonts ( numFounts );

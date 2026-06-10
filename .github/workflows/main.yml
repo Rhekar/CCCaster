@@ -1,41 +1,195 @@
-# This is a basic workflow to help you get started with Actions
 name: CI
 
-# Controls when the workflow will run
+# Build on every push to master, every PR, and every tag. Tags additionally
+# cut a draft GitHub release with the built artifact + an auto-generated changelog.
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ master ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+permissions:
+  contents: read
+
 jobs:
-  # This workflow contains a single job called "build"
+  # ------------------------------------------------------------------ build
   build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          fetch-tags: true
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: uname
-      - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@v2
-      - name: Install wine
+      - name: Set up MSYS2 (MINGW32 / i686)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: true
+          install: >-
+            make
+            rsync
+            zip
+            git
+            mingw-w64-i686-toolchain
+
+      - name: Build Steam release
+        env:
+          TAG_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: |
-          sudo dpkg --add-architecture i386
-          wget -qO - https://dl.winehq.org/wine-builds/winehq.key | sudo apt-key add -
-          sudo add-apt-repository ppa:cybermax-dexter/sdl2-backport
-          sudo apt-add-repository "deb https://dl.winehq.org/wine-builds/ubuntu $(lsb_release -cs) main"
-          sudo apt install --install-recommends winehq-stable
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: make release
+          set -euo pipefail
+          # The Makefile hardcodes the toolchain prefix as ../mingw32/bin/i686-w64-mingw32-*
+          # (a symlink to the MSYS2 mingw32 tree on the dev's machine). Reproduce that layout.
+          ln -sfn /mingw32 ../mingw32
+          # actions/checkout only marks the workdir safe for the *Windows* git; the MSYS2 git used
+          # by the Makefile has its own config and otherwise refuses the repo ("dubious ownership"),
+          # which makes make_version's `git rev-parse`/`git status` return empty (baking a bogus
+          # version + bare "-custom" revision). Trust the workdir for the MSYS2 git too.
+          git config --global --add safe.directory "$(pwd)" || true
+          # MSYS2's recipe shell can blank TMP/TEMP, making native gcc/collect2 fall back to a
+          # non-writable C:\WINDOWS temp. Wrap the recipe shell to force a writable temp — same
+          # fix as scripts/build-steam.sh.
+          printf '%s\n' '#!/usr/bin/sh' 'export TMPDIR=/tmp TMP=/tmp TEMP=/tmp' 'shift' 'eval "$@"' > /tmp/recipe-shell.sh
+          chmod +x /tmp/recipe-shell.sh
+          # On a tag build, pin the version straight from the tag (e.g. v4.1.0 -> 4.1.0). Passing
+          # FULL_VERSION makes the baked-in version deterministic and bypasses git-in-make entirely,
+          # so a flaky git on the runner can't produce a version that mismatches the tag.
+          version_arg=
+          if [ -n "${TAG_VERSION:-}" ]; then
+            version_arg="FULL_VERSION=${TAG_VERSION#v}"
+            echo "Pinning release version: ${version_arg}"
+          fi
+          # STEAM_SDK enables -DENABLE_STEAM and links the 32-bit steam_api import lib; the
+          # resulting zip bundles steam_api.dll + steam_appid.txt via the Makefile's STEAM_PKG_*
+          # hooks. CHMOD_X/GRANT are no-oped to skip per-file icacls calls (not needed in CI).
+          make release \
+            $version_arg \
+            STEAM_SDK=3rdparty/SteamworksSDK/public \
+            OS=Windows_NT \
+            SHELL=/tmp/recipe-shell.sh \
+            CHMOD_X=true GRANT=true \
+            -j "$(nproc)"
+          # Diagnostic: show exactly what version got baked in, so any future mismatch is obvious.
+          echo "=== generated lib/Version.local.hpp ==="
+          cat lib/Version.local.hpp || true
+
+      - name: Verify baked version matches tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"
+          zip="cccaster.v${ver}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::expected archive $zip not produced (got: $(ls cccaster.v*.zip 2>/dev/null))"
+            exit 1
+          fi
+          # The zip's existence proves the Makefile derived the right major.minor+suffix (ARCHIVE is
+          # named from VERSION+SUFFIX). Now assert the full tag version is embedded as a CONTIGUOUS
+          # string in both shipped binaries. This is exactly what the runtime needs: the exe's
+          # hook.dll compatibility check (targets/Main.cpp) searches the dll's bytes for the version
+          # string, so a release whose binaries lack a contiguous copy boots as "Incompatible
+          # hook.dll". scripts/make_version embeds LocalVersionCode[] precisely so this holds; grep
+          # here so any regression of that embedding fails CI instead of shipping a broken release.
+          exe="cccaster.v$(echo "$ver" | cut -d. -f1,2).exe"
+          dll="cccaster/hook.dll"
+          for bin in "$exe" "$dll"; do
+            if [ ! -f "$bin" ]; then
+              echo "::error::expected built binary $bin not found"
+              exit 1
+            fi
+            if ! grep -aqF "$ver" "$bin"; then
+              echo "::error::$bin does not embed contiguous version '$ver' (would boot as Incompatible hook.dll)"
+              exit 1
+            fi
+          done
+          echo "OK: $zip / $exe / $dll embed version $ver"
+
+      - name: Stage artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp cccaster.v*.zip dist/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cccaster-${{ github.sha }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------- release
+  # On a tag push (v*), create a DRAFT release with the built zip attached and
+  # release notes auto-generated from the git log since the previous tag.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (full history + tags for changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Generate changelog from git log
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          prev="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+          {
+            echo "## ${tag}"
+            echo
+            if [ -n "${prev}" ]; then
+              echo "Changes since ${prev}:"
+              echo
+              git log "${prev}..${tag}" --no-merges --pretty='- %s (%h)'
+            else
+              echo "Changes:"
+              echo
+              git log "${tag}" --no-merges --pretty='- %s (%h)'
+            fi
+          } > RELEASE_NOTES.md
+          echo "----- generated notes -----"
+          cat RELEASE_NOTES.md
+
+      - name: Create or update draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          mapfile -t assets < <(find dist -type f -name '*.zip')
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No build artifacts (*.zip) found to attach" >&2
+            exit 1
+          fi
+          echo "Attaching: ${assets[*]}"
+          # Idempotent: if a re-run (or re-pushed tag) finds the release already exists, replace its
+          # asset with --clobber instead of failing on `gh release create`, so the published asset
+          # always reflects the latest build for this tag.
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --clobber
+            gh release edit "${tag}" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "${tag}" \
+              --draft \
+              --title "${tag}" \
+              --notes-file RELEASE_NOTES.md \
+              "${assets[@]}"
+          fi

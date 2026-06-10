@@ -1,75 +1,53 @@
 #pragma once
 
+#include "ILobbyBackend.hpp"
 #include "ConsoleUi.hpp"
 #include "Socket.hpp"
 #include "Timer.hpp"
 
 #define DEFAULT_GET_TIMEOUT ( 5000 )
 
-enum GameType
-{
-    FFA,
-    WinnerStaysOn,
-};
-
-enum LobbyMode
-{
-    MENU,
-    CONCERTO_BROWSE,
-    CONCERTO_LOBBY,
-    DEFAULT_LOBBY,
-};
-
+// Relay/Concerto server-backed lobby (the "fallback" backend). A background Thread runs an
+// EventManager loop over a TcpSocket to the lobby server and signals MainUi's uiCondVar via the
+// ILobbyBackend::Owner callbacks. See SteamLobby for the Steam-backed implementation of the same
+// interface.
 class Lobby
     : Socket::Owner
     , Timer::Owner
     , public Thread
+    , public ILobbyBackend
 {
 public:
-    struct Owner
-    {
-        virtual void connectionFailed( Lobby* lobby ) = 0;
-        virtual void unlock( Lobby* lobby ) = 0;
-    };
 
-    Owner *owner = 0;
+    std::vector<std::string> getMenu() override;
+    std::vector<std::string> getIps() override;
+    std::vector<std::string> getIds() override;
 
-    std::vector<std::string> getMenu();
-    std::vector<std::string> getIps();
-    std::vector<std::string> getIds();
-
-    Lobby ( Owner* owner );
+    Lobby ( ILobbyBackend::Owner* owner );
 
     bool connect( std::string url );
     void disconnect();
-    void host( std::string name, IpAddrPort port );
-    void unhost();
-    std::string join( std::string name, int selection );
-    void join( std::string name, std::string code );
-    void challenge( std::string target, IpAddrPort port );
-    void create( std::string name, std::string type );
-    void preaccept( std::string id );
-    void accept();
-    void end();
-    void fetchPublicLobby();
-    bool checkLobbyCode( std::string code );
+    void host( std::string name, IpAddrPort port ) override;
+    void unhost() override;
+    std::string join( std::string name, int selection ) override;
+    void join( std::string name, std::string code ) override;
+    void challenge( std::string target, IpAddrPort port ) override;
+    void create( std::string name, std::string type ) override;
+    void preaccept( std::string id ) override;
+    void accept() override;
+    void end() override;
+    void fetchPublicLobby() override;
+    bool checkLobbyCode( std::string code ) override;
 
-    void init( Owner* owner );
+    void init( ILobbyBackend::Owner* owner );
 
-    void stop();
+    // ILobbyBackend lifecycle (unify with Thread's start/isRunning)
+    void start() override { Thread::start(); }
+    bool isRunning() override { return Thread::isRunning(); }
+    void stop() override;
 
     uint64_t timeout;
-    IpAddrPort _address;
-    bool connectionSuccess;
     bool newRequestSuccess;
-
-    int numEntries;
-    bool hostSuccess;
-    Mutex entryMutex;
-    LobbyMode mode;
-
-    std::string lobbyError;
-    std::string lobbyMsg;
 
 
 private:

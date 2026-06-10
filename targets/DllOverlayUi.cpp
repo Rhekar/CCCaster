@@ -58,6 +58,13 @@ void InvalidateDeviceObjects()
     initalizedDirectX = false;
 
     invalidateOverlayText();
+#ifdef LOGGING
+    // Release ImGui's D3DPOOL_DEFAULT resources (vertex/index buffers, font texture, state block)
+    // BEFORE the game resets the device (e.g. alt+enter fullscreen toggle). Otherwise Reset() fails
+    // on the still-live default-pool resources and ImGui then renders against freed memory, which
+    // faults inside hook.dll. The next ImGui_ImplDX9_NewFrame() recreates them automatically.
+    ImGui_ImplDX9_InvalidateDeviceObjects();
+#endif
 }
 
 // Note: this is called on the SAME thread as the main application thread

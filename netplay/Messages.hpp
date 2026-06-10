@@ -33,7 +33,7 @@ struct ClientMode : public SerializableSequence
 {
     ENUM_BOILERPLATE ( ClientMode, Host, Client, SpectateNetplay, SpectateBroadcast, Broadcast, Offline )
 
-    enum { Training = 0x01, GameStarted = 0x02, UdpTunnel = 0x04, IsWine = 0x08, VersusCPU = 0x10, Replay = 0x20, Trial = 0x40 };
+    enum { Training = 0x01, GameStarted = 0x02, UdpTunnel = 0x04, IsWine = 0x08, VersusCPU = 0x10, Replay = 0x20, Trial = 0x40, IsSteam = 0x80 };
 
     uint8_t flags = 0;
 
@@ -62,6 +62,7 @@ struct ClientMode : public SerializableSequence
     bool isTrial() const { return ( flags & Trial ); }
     bool isGameStarted() const { return ( flags & GameStarted ); }
     bool isUdpTunnel() const { return ( flags & UdpTunnel ); }
+    bool isSteam() const { return ( flags & IsSteam ); }
     bool isWine() const { return ( flags & IsWine ); }
     bool isSinglePlayer() const { return ( isNetplay() || isVersusCPU() ); }
 
@@ -80,6 +81,9 @@ struct ClientMode : public SerializableSequence
 
         if ( flags & UdpTunnel )
             str += std::string ( str.empty() ? "" : ", " ) + "UdpTunnel";
+
+        if ( flags & IsSteam )
+            str += std::string ( str.empty() ? "" : ", " ) + "IsSteam";
 
         if ( flags & IsWine )
             str += std::string ( str.empty() ? "" : ", " ) + "IsWine";
@@ -282,6 +286,28 @@ struct SpectateConfig : public SerializableSequence
 struct ConfirmConfig : public SerializableSequence
 {
     EMPTY_MESSAGE_BOILERPLATE ( ConfirmConfig )
+};
+
+
+// Sent over IPC from the DLL to the standalone when a match ends (entering RetryMenu). The
+// standalone side otherwise only learns the result via results.csv; the king-of-the-hill lobby
+// queue needs it directly. hostWon is derived from the synced win counts + hostPlayer, so it is
+// computed identically on both the host and the client.
+struct MatchResult : public SerializableSequence
+{
+    uint8_t hostWon = 0;
+    uint8_t p1Wins = 0;
+    uint8_t p2Wins = 0;
+
+    MatchResult ( uint8_t hostWon, uint8_t p1Wins, uint8_t p2Wins )
+        : hostWon ( hostWon ), p1Wins ( p1Wins ), p2Wins ( p2Wins ) {}
+
+    std::string str() const override
+    {
+        return format ( "MatchResult[hostWon=%u;%u-%u]", hostWon, p1Wins, p2Wins );
+    }
+
+    PROTOCOL_MESSAGE_BOILERPLATE ( MatchResult, hostWon, p1Wins, p2Wins )
 };
 
 

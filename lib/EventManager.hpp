@@ -3,6 +3,7 @@
 #include "Thread.hpp"
 #include "BlockingQueue.hpp"
 
+#include <cstdint>
 #include <memory>
 
 

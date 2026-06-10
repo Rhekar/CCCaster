@@ -1,5 +1,16 @@
-VERSION = 3.1
-SUFFIX = .007
+# Full version code derived from a git tag (leading 'v' stripped).
+# When several tags share the HEAD commit (e.g. v4.0 and v4.0.1), prefer the HIGHEST version
+# rather than whatever `git describe` happens to pick first. Fall back to the nearest reachable
+# tag, then to a literal when no tag is reachable (e.g. a source export with no git history).
+GIT_TAG := $(shell git tag --points-at HEAD --sort=-v:refname 2>/dev/null | head -n1)
+GIT_TAG := $(or $(GIT_TAG),$(shell git describe --tags --abbrev=0 2>/dev/null))
+GIT_VERSION := $(patsubst v%,%,$(GIT_TAG))
+FULL_VERSION := $(or $(GIT_VERSION),3.1.007)
+
+# major.minor: drives the binary/archive filenames and netplay-compat comparison
+VERSION := $(shell echo '$(FULL_VERSION)' | cut -d. -f1,2)
+# remaining patch part, with its leading dot (empty for tags like v2.1e)
+SUFFIX := $(patsubst $(VERSION)%,%,$(FULL_VERSION))
 NAME = cccaster
 TAG =
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -90,13 +101,57 @@ DEFINES += -DLOBBY_LIST='"$(LOBBY_LIST)"'
 INCLUDES = -I$(CURDIR) -I$(CURDIR)/netplay -I$(CURDIR)/lib -I$(CURDIR)/tests -I$(CURDIR)/3rdparty -I$(CURDIR)/sequences
 INCLUDES += -I$(CURDIR)/3rdparty/cereal/include -I$(CURDIR)/3rdparty/gtest/include -I$(CURDIR)/3rdparty/minhook/include
 INCLUDES += -I$(CURDIR)/3rdparty/d3dhook -I$(CURDIR)/3rdparty/framedisplay -I$(CURDIR)/3rdparty/imgui -I$(CURDIR)/3rdparty/imgui/backends
-CC_FLAGS = -m32 $(INCLUDES) $(DEFINES)
+# -include stdint.h: some libstdc++ versions (e.g. CI's MSYS2 toolchain) don't transitively
+# pull in the fixed-width int types that ~95 files rely on, so force them into every TU rather
+# than hand-adding the include everywhere. Use stdint.h (not the C++-only <cstdint>) because
+# CC_FLAGS is shared with the C sources (3rdparty/md5.c, miniz.c, ...); stdint.h works for both
+# and still exposes the bare global uint32_t the codebase uses.
+CC_FLAGS = -m32 -include stdint.h $(INCLUDES) $(DEFINES)
 #	https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
 # 	Intel Celeron 440 is listed as minimum CPU for melty on steam
 CC_FLAGS += -mmmx -msse -msse2 -msse3 -mssse3
 
 # Linker flags
-LD_FLAGS = -m32 -static -lws2_32 -lpsapi -lwinpthread -lwinmm -lole32 -ldinput -lwininet -ldwmapi -lgdi32
+LD_FLAGS = -m32 -static -lws2_32 -lpsapi -lwinpthread -lwinmm -lole32 -ldinput -lwininet -ldwmapi -lgdi32 -ldbghelp
+
+# ----- Steamworks (optional Steam connection method) -----
+# Disabled unless STEAM_SDK is set to the 'public' dir of the Steamworks SDK, e.g.:
+#   make STEAM_SDK=../SteamworksSDK/public
+# When set, -DENABLE_STEAM is defined and the 32-bit steam_api import lib is linked.
+# steam_api.dll (32-bit, from <sdk>/redistributable_bin/) + a steam_appid.txt containing
+# 411370 must be shipped next to MBAA.exe at runtime. All Steam code is #ifdef ENABLE_STEAM
+# so builds without STEAM_SDK are byte-for-byte unaffected.
+STEAM_SDK ?=
+STEAM_LIB =
+STEAM_PKG_ROOT = true
+STEAM_PKG_FOLDER = true
+ifneq ($(STEAM_SDK),)
+    DEFINES += -DENABLE_STEAM
+    INCLUDES += -I$(STEAM_SDK)
+    # MinGW links the MSVC import lib directly (verified). If a future toolchain refuses,
+    # generate one with: gendef steam_api.dll && dlltool -d steam_api.def -l libsteam_api.a
+    # Linked ONLY into the main exe + hook.dll (see their recipes), NOT the build-time tools
+    # (generator/debugger), so those don't acquire a steam_api.dll runtime dependency.
+    STEAM_LIB = $(STEAM_SDK)/../redistributable_bin/steam_api.lib
+    # Runtime files: steam_api.dll (32-bit) + steam_appid.txt(411370) must sit in the game
+    # dir (next to MBAA.exe / the main exe, which is also MBAA.exe's working dir) so both the
+    # launcher and the injected hook.dll can load Steam. We drop them next to the main exe and
+    # bundle a copy in the cccaster/ folder for the release archive.
+    STEAM_DLL = $(STEAM_SDK)/../redistributable_bin/steam_api.dll
+    STEAM_PKG_ROOT = cp -f $(STEAM_DLL) ./ && printf '411370' > ./steam_appid.txt
+    STEAM_PKG_FOLDER = cp -f $(STEAM_DLL) $(FOLDER)/ && printf '411370' > $(FOLDER)/steam_appid.txt
+endif
+
+# ----- Sentry / Glitchtip crash reporting (optional) -----
+# Set SENTRY_DSN to your ingest DSN to enable crash/error reporting, e.g.:
+#   make SENTRY_DSN='https://<key>@glitchtip.example.com/1'
+# Empty (default) => the client is compiled in but disabled at runtime (no-op, no network), so
+# builds without a DSN are unaffected. Like the relay IPs, the DSN is baked into the binary; keep
+# real DSNs out of git (pass via CLI or source from .env). lib/SentryClient.cpp links into the main
+# exe + hook.dll automatically (lib/*.cpp wildcard); the launcher recipe pulls it in explicitly.
+SENTRY_DSN ?=
+SENTRY_DEFINE = -DSENTRY_DSN='"$(SENTRY_DSN)"'
+DEFINES += $(SENTRY_DEFINE)
 
 # Build options
 # DEFINES += -DDISABLE_LOGGING
@@ -115,6 +170,17 @@ else
 	LOGGING_FLAGS = -s -Os -O2 -DLOGGING
 endif
 RELEASE_FLAGS = -s -Os -Ofast -fno-rtti -DNDEBUG -DRELEASE -DDISABLE_LOGGING -DDISABLE_ASSERTS
+
+# SYMBOLS=1 keeps DWARF debug info in the optimized logging build so Sentry/crash-report addresses
+# can be resolved with scripts/symbolicate.sh. It adds -ggdb (line info) and -fno-omit-frame-pointer
+# (clean StackWalk64 stacks), drops -s, and skips the strip step — WITHOUT pulling in the debug
+# build's -O0 or -D_GLIBCXX_DEBUG (which alter timing and abort on latent UB). Only affects logging;
+# scripts/build-steam.sh passes it by default. Release stays stripped.
+SYMBOLS ?= 0
+ifeq ($(SYMBOLS),1)
+	LOGGING_FLAGS := $(filter-out -s,$(LOGGING_FLAGS)) -ggdb -fno-omit-frame-pointer
+	STRIP = touch
+endif
 
 # Build type
 BUILD_TYPE = build_debug
@@ -152,6 +218,7 @@ ifneq (,$(findstring release,$(MAKECMDGOALS)))
 		$(ZIP) $(ARCHIVE) -j scripts/Add_Handler_Protocol.bat
 		$(ZIP) $(ARCHIVE) -j $(RELAY_LIST)
 		$(ZIP) $(ARCHIVE) -j $(LOBBY_LIST)
+		$(ZIP) $(ARCHIVE) -j vendor/*
 		cp -r res/GRP GRP
 		$(ZIP) $(ARCHIVE) -r GRP
 		$(ZIP) $(ARCHIVE) -r cccaster/trials
@@ -162,21 +229,23 @@ endif
 
 $(BINARY): $(addprefix $(BUILD_PREFIX)/,$(MAIN_OBJECTS)) res/icon.res
 	rm -f $(filter-out $(BINARY),$(wildcard $(NAME)*.exe))
-	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS)
+	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS) $(STEAM_LIB)
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
+	$(STEAM_PKG_ROOT)
 	@echo
 
 $(FOLDER)/$(DLL): $(addprefix $(BUILD_PREFIX)/,$(DLL_OBJECTS)) res/rollback.o targets/CallDraw.s | $(FOLDER)
-	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ -shared $(LD_FLAGS) -ld3dx9
+	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ -shared $(LD_FLAGS) -ld3dx9 $(STEAM_LIB)
 	@echo
 	$(STRIP) $@
 	$(GRANT)
+	$(STEAM_PKG_FOLDER)
 	@echo
 
-$(FOLDER)/$(LAUNCHER): tools/Launcher.cpp | $(FOLDER)
-	$(CXX) -o $@ $^ -m32 -s -Os -O2 -Wall -static -mwindows
+$(FOLDER)/$(LAUNCHER): tools/Launcher.cpp lib/SentryClient.cpp | $(FOLDER)
+	$(CXX) -o $@ $^ -m32 -s -Os -O2 -Wall -static -mwindows -I$(CURDIR)/lib -I$(CURDIR)/3rdparty/cereal/include $(SENTRY_DEFINE) -lwininet -ldbghelp
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
@@ -229,7 +298,7 @@ res/icon.res: res/icon.rc res/icon.ico
 
 LOGGING_PREFIX = build_logging_$(BRANCH)
 DEBUGGER_LIB_OBJECTS = \
-	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o,$(LIB_OBJECTS)))
+	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o lib/SteamManager.o lib/SteamSocket.o lib/SteamLobby.o lib/SteamMatchmaking.o,$(LIB_OBJECTS)))
 
 tools/$(DEBUGGER): tools/Debugger.cpp $(DEBUGGER_LIB_OBJECTS)
 	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS) \
@@ -241,7 +310,7 @@ tools/$(DEBUGGER): tools/Debugger.cpp $(DEBUGGER_LIB_OBJECTS)
 
 
 GENERATOR_LIB_OBJECTS = \
-	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o,$(LIB_OBJECTS)))
+	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o lib/SteamManager.o lib/SteamSocket.o lib/SteamLobby.o lib/SteamMatchmaking.o,$(LIB_OBJECTS)))
 
 tools/$(GENERATOR): tools/Generator.cpp $(GENERATOR_LIB_OBJECTS)
 	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS)

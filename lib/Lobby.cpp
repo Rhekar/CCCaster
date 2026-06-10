@@ -32,9 +32,9 @@ vector<string> Lobby::getIds(){
     return lobbyids;
 }
 
-Lobby::Lobby( Owner* owner )
-    : owner( owner )
+Lobby::Lobby( ILobbyBackend::Owner* owner )
 {
+    this->owner = owner;
     timeout = 5000;
     numEntries = 0;
     blankEntry = "";

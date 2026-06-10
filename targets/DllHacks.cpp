@@ -298,7 +298,7 @@ SyncHash::SyncHash ( IndexedFrame indexedFrame )
     chara[N-1].seqState     = *CC_P ## N ## _SEQ_STATE_ADDR;                                    \
     chara[N-1].health       = *CC_P ## N ## _HEALTH_ADDR;                                       \
     chara[N-1].redHealth    = *CC_P ## N ## _RED_HEALTH_ADDR;                                   \
-    chara[N-1].meter        = *CC_P ## N ## _METER_ADDR;                                        \
+    chara[N-1].meter        = ( *CC_INTRO_STATE_ADDR ? 0 : *CC_P ## N ## _METER_ADDR );         \
     chara[N-1].heat         = *CC_P ## N ## _HEAT_ADDR;                                         \
     chara[N-1].guardBar     = ( *CC_INTRO_STATE_ADDR ? 0 : *CC_P ## N ## _GUARD_BAR_ADDR );     \
     chara[N-1].guardQuality = *CC_P ## N ## _GUARD_QUALITY_ADDR;                                \

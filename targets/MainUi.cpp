@@ -7,9 +7,19 @@
 #include "CharacterSelect.hpp"
 #include "StringUtils.hpp"
 #include "NetplayStates.hpp"
+#include "EventManager.hpp"
+#include "Lobby.hpp"
+#include "MatchmakingManager.hpp"
+#ifdef ENABLE_STEAM
+#include "SteamManager.hpp"
+#include "SteamSocket.hpp"
+#include "SteamLobby.hpp"
+#include "SteamMatchmaking.hpp"
+#endif
 
 #include <algorithm>
 #include <iomanip>
+#include <fstream>
 #include <mmsystem.h>
 #include <wininet.h>
 
@@ -166,6 +176,13 @@ void MainUi::server ( RunFuncPtr run )
 }
 
 void MainUi::wait() {
+#ifdef ENABLE_STEAM
+    // The Steam lobby has no background thread to signal uiCondVar; it is pumped on this thread.
+    if ( _lobby && _lobby->isSteam() ) {
+        _lobby->pumpUntilSettled();
+        return;
+    }
+#endif
     while ( uiCondVar.wait ( uiMutex, 2500 ) ) {
         if ( ! EventManager::get().isRunning() ) {
             break;
@@ -175,10 +192,23 @@ void MainUi::wait() {
 
 void MainUi::lobby( RunFuncPtr run )
 {
-    _lobby.reset( new Lobby( this ) );
     ifstream infile;
-    _lobby->_address = *serverList.cbegin();
+    // AutoManager (managers initialized) BEFORE SteamManager::ref(), so the pump timer created
+    // inside ref() lives in an initialized TimerManager.
     AutoManager _;
+
+#ifdef ENABLE_STEAM
+    // Prefer Steam lobbies when enabled + available; otherwise fall back to the relay server.
+    if ( _config.getInteger ( "useSteamLobby" ) && SteamManager::get().ref() )
+    {
+        _lobby.reset ( new SteamLobby ( this ) );
+    }
+    else
+#endif
+    {
+        _lobby.reset ( new Lobby ( this ) );
+        _lobby->_address = *serverList.cbegin();
+    }
 
     _lobby->start();
 
@@ -186,7 +216,7 @@ void MainUi::lobby( RunFuncPtr run )
     LOCK ( uiMutex );
     wait();
     _ui->pop();
-    if ( ! EventManager::get().isRunning() ) {
+    if ( _lobby->needsEventManager() && ! EventManager::get().isRunning() ) {
         sessionError = "Failed to connect";
         return;
     }
@@ -206,13 +236,19 @@ void MainUi::lobby( RunFuncPtr run )
     string lobbyBase = "Lobby";
     string lobbyDisplay = lobbyBase;
     string name = _config.getString ( "displayName" );
+    uint32_t myLastGen = 0;     // last king-of-the-hill match generation we acted on (Steam queue)
+    QueueState qs;              // current queue snapshot (Steam queue)
     for ( ;; )
     {
-        if ( ! _lobby->isRunning() || ! EventManager::get().isRunning() ) {
+        if ( ! _lobby->isRunning() || ( _lobby->needsEventManager() && ! EventManager::get().isRunning() ) ) {
             LOG( "Lobby stopped"  );
             sessionError = "Disconnected!";
             break;
         }
+        // Steam backend has no background thread; pull fresh lobby/member state on this thread.
+        _lobby->refresh();
+        // If we own a king-of-the-hill lobby, advance the queue + publish the next assignment.
+        _lobby->coordinatorTick();
         // Update ui
         LOG("Getting lobby mutex");
         _lobby->entryMutex.lock();
@@ -220,8 +256,68 @@ void MainUi::lobby( RunFuncPtr run )
         numEntries =_lobby->numEntries;
         lobbyIps =_lobby->getIps();
         lobbyIds =_lobby->getIds();
+        qs =_lobby->getQueueState();
         _lobby->entryMutex.unlock();
         LOG("releasing lobby mutex");
+
+#ifdef ENABLE_STEAM
+        // King-of-the-hill auto-start: when the queue assigns us a role for a new match, launch it
+        // directly (no player selection). Un-readied players have role None and stay in the menu.
+        if ( _lobby->supportsQueue() && _lobby->mode == CONCERTO_LOBBY
+             && qs.phase == QueuePhase::Playing && qs.gen > myLastGen && qs.myRole != QueueRole::None )
+        {
+            myLastGen = qs.gen;
+            lastMatchResult.valid = false;
+            initialConfig.mode.flags |= ClientMode::IsSteam;
+
+            if ( qs.myRole == QueueRole::Host )
+            {
+                initialConfig.mode.value = ClientMode::Host;
+                _address = IpAddrPort ( steamAddr ( SteamManager::get().getSteamID() ), ( uint16_t ) 0 );
+            }
+            else if ( qs.myRole == QueueRole::Client )
+            {
+                initialConfig.mode.value = ClientMode::Client;
+                _netplayConfig.clear();
+                _address = qs.hostAddr;
+            }
+            else // Spectator
+            {
+                initialConfig.mode.value = ClientMode::SpectateNetplay;
+                _address = qs.hostAddr;
+            }
+
+            addressSelected = true;
+            LOG ( "Queue gen=%u role=%d prerun", qs.gen, ( int ) qs.myRole );
+            RUN ( _address, initialConfig );
+            LOG ( "Queue gen=%u postrun", qs.gen );
+            _ui->popNonUserInput();
+
+            // Players report the outcome so the owner can advance the queue. Always report a
+            // winner so the queue can never stall: a clean finish gives the real winner (both
+            // sides agree); a disconnect makes the surviving reporter the winner; bailing out
+            // mid-match with no result is a forfeit (the opponent wins).
+            if ( qs.myRole == QueueRole::Host || qs.myRole == QueueRole::Client )
+            {
+                const uint64_t myId = SteamManager::get().getSteamID();
+                const uint64_t oppId = ( qs.myRole == QueueRole::Host ) ? qs.clientId : qs.hostId;
+                uint64_t winner;
+                if ( lastMatchResult.valid )
+                    winner = lastMatchResult.hostWon ? qs.hostId : qs.clientId;
+                else if ( ! sessionError.empty() )
+                    winner = myId;      // opponent dropped; I survived
+                else
+                    winner = oppId;     // I left mid-match without a result -> forfeit
+                if ( winner )
+                    _lobby->reportResult ( qs.gen, winner );
+            }
+
+            // A spectate session ending (the host tore down) surfaces a benign disconnect.
+            sessionError.clear();
+            continue;
+        }
+#endif
+
         int oldPos = _ui->top<ConsoleUi::Menu>()->getPosition();
         _ui->pop();
         _ui->pushInFront ( new ConsoleUi::Menu ( lobbyDisplay,
@@ -301,7 +397,14 @@ void MainUi::lobby( RunFuncPtr run )
                     lobbyDisplay = "  | Room | Players | Error: " + _lobby->lobbyError;
             }
         } else if ( _lobby->mode == CONCERTO_LOBBY ) {
-            if ( mode < 0 || mode >= numEntries ) {
+            if ( _lobby->supportsQueue() ) {
+                // King-of-the-hill queue UI: row 0 toggles our ready flag; Exit (negative) leaves.
+                // Matches auto-start above; informational rows do nothing.
+                if ( mode == 0 )
+                    _lobby->setReady ( ! qs.iAmReady );
+                else if ( mode < 0 )
+                    break;
+            } else if ( mode < 0 || mode >= numEntries ) {
                 break;
             } else {
                 if ( lobbyIps[ mode ] == "None" ) {
@@ -316,6 +419,12 @@ void MainUi::lobby( RunFuncPtr run )
                     wait();
                     if ( _lobby->hostSuccess ) {
                         initialConfig.mode.value = ClientMode::Host;
+#ifdef ENABLE_STEAM
+                        if ( _lobby->isSteam() ) {
+                            initialConfig.mode.flags |= ClientMode::IsSteam;
+                            _address = IpAddrPort ( steamAddr ( SteamManager::get().getSteamID() ), ( uint16_t ) 0 );
+                        }
+#endif
                         addressSelected = true;
                         LOG( "Lobby host Prerun");
                         RUN ( _address, initialConfig );
@@ -340,7 +449,14 @@ void MainUi::lobby( RunFuncPtr run )
                     _lobby->preaccept( lobbyIds[mode] );
                     initialConfig.mode.value = ClientMode::Client;
                     _netplayConfig.clear();
-                    _address = lobbyIps[ mode ];
+#ifdef ENABLE_STEAM
+                    if ( _lobby->isSteam() ) {
+                        initialConfig.mode.flags |= ClientMode::IsSteam;
+                        // lobbyIps[mode] is a "steam:<id>" string; store it verbatim.
+                        _address = IpAddrPort ( lobbyIps[ mode ], ( uint16_t ) 0 );
+                    } else
+#endif
+                        _address = lobbyIps[ mode ];
                     addressSelected = true;
                     LOG( "Lobby join Prerun");
                     RUN ( _address, initialConfig );
@@ -400,16 +516,26 @@ void MainUi::lobby( RunFuncPtr run )
             }
         }
     }
-    LOG( "Lobby Stopping EM");
-    EventManager::get().stop();
-    LOG( "Lobby after Stopping EM");
-    if ( !addressSelected ) {
-        display ( "Disconnecting from server..." );
+#ifdef ENABLE_STEAM
+    if ( _lobby->isSteam() ) {
+        // No EventManager loop / background thread to wind down for the Steam backend.
+        if ( !addressSelected ) {
+            display ( "Leaving lobby..." );
+        }
+    } else
+#endif
+    {
+        LOG( "Lobby Stopping EM");
+        EventManager::get().stop();
+        LOG( "Lobby after Stopping EM");
+        if ( !addressSelected ) {
+            display ( "Disconnecting from server..." );
+        }
+        //LOCK ( uiMutex );
+        LOG( "Lobby wait mutex");
+        //if ( lo)
+        uiCondVar.wait ( uiMutex );
     }
-    //LOCK ( uiMutex );
-    LOG( "Lobby wait mutex");
-    //if ( lo)
-    uiCondVar.wait ( uiMutex );
     LOG( "Lobby mutex signaled");
     _ui->pop();
     LOG( "Lobby clear ui");
@@ -427,7 +553,17 @@ void MainUi::matchmaking( RunFuncPtr run )
     isMatchmaking = true;
     ifstream infile;
     string region = _config.getString ( "matchmakingRegion" );
-    _mmm.reset( new MatchmakingManager( this, *serverList.cbegin(), region ) );
+
+#ifdef ENABLE_STEAM
+    // Prefer Steam matchmaking when enabled + available; otherwise fall back to the relay server.
+    // ref() here creates the pump timer; TimerManager::initialize() (run by AutoManager below)
+    // preserves already-allocated timers, so the pre-AutoManager order is fine.
+    if ( _config.getInteger ( "useSteamLobby" ) && SteamManager::get().ref() )
+        _mmm.reset ( new SteamMatchmaking ( this, region ) );
+    else
+#endif
+        _mmm.reset( new MatchmakingManager( this, *serverList.cbegin(), region ) );
+
     AutoManager _ ( _mmm.get(), getConsoleWindow() );
 
     _mmm->start();
@@ -435,26 +571,41 @@ void MainUi::matchmaking( RunFuncPtr run )
     display ( "Connecting to server..." );
     LOCK ( uiMutex );
     LOG( "lockConnectionMutex");
-    uiCondVar.wait ( uiMutex );
+#ifdef ENABLE_STEAM
+    if ( _mmm->isSteam() )
+        _mmm->waitConnected();
+    else
+#endif
+        uiCondVar.wait ( uiMutex );
     LOG( "unlockConnectionMutex");
     _ui->pop();
-    if ( ! EventManager::get().isRunning() || !_mmm->isRunning() ) {
+    if ( ( _mmm->needsEventManager() && ! EventManager::get().isRunning() ) || !_mmm->isRunning() ) {
         sessionError = "Failed to connect";
         return;
     }
 
     display ( "Waiting for opponent..." );
     LOG( "lockWaitingMutex");
-    uiCondVar.wait ( uiMutex );
+#ifdef ENABLE_STEAM
+    if ( _mmm->isSteam() )
+        _mmm->waitMatched();
+    else
+#endif
+        uiCondVar.wait ( uiMutex );
     LOG( "unlockWaitingMutex");
     _ui->pop();
-    if ( ! EventManager::get().isRunning() ) {
+    if ( _mmm->needsEventManager() && ! EventManager::get().isRunning() ) {
         sessionError = "Disconnected";
         return;
     }
 
     if ( initialConfig.mode.value == ClientMode::Client ) {
         _netplayConfig.clear();
+#ifdef ENABLE_STEAM
+        // _address was already set to steam:<id> by setAddr(); just tag the session.
+        if ( _mmm->isSteam() )
+            initialConfig.mode.flags |= ClientMode::IsSteam;
+#endif
         _mmm->ignoreKb = true;
         LOG( "MMM preRun");
         RUN ( _address, initialConfig );
@@ -462,7 +613,13 @@ void MainUi::matchmaking( RunFuncPtr run )
         _ui->popNonUserInput();
     } else if ( initialConfig.mode.value == ClientMode::Host ) {
         _netplayConfig.clear();
-        _address = "46318";
+#ifdef ENABLE_STEAM
+        if ( _mmm->isSteam() ) {
+            initialConfig.mode.flags |= ClientMode::IsSteam;
+            _address = IpAddrPort ( steamAddr ( SteamManager::get().getSteamID() ), ( uint16_t ) 0 );
+        } else
+#endif
+            _address = "46318";
         _mmm->ignoreKb = true;
         LOG( "MMM preRun");
         RUN ( _address, initialConfig );
@@ -472,12 +629,19 @@ void MainUi::matchmaking( RunFuncPtr run )
         sessionError = "Session Closed";
     }
 
-    LOG( "MMM stopping EM");
-    EventManager::get().stop();
-    LOG( "MMM done" );
-    display ( "Disconnecting from server..." );
-    uiCondVar.wait ( uiMutex );
-    _ui->pop();
+#ifdef ENABLE_STEAM
+    if ( _mmm->isSteam() ) {
+        // No EventManager loop / background thread to wind down for the Steam backend.
+    } else
+#endif
+    {
+        LOG( "MMM stopping EM");
+        EventManager::get().stop();
+        LOG( "MMM done" );
+        display ( "Disconnecting from server..." );
+        uiCondVar.wait ( uiMutex );
+        _ui->pop();
+    }
     isMatchmaking = false;
 }
 
@@ -979,6 +1143,9 @@ void MainUi::settings()
         "Trial Input Guide Settings",
         "Experimental Settings",
         "About",
+#ifdef ENABLE_STEAM
+        "Lobby backend",
+#endif
     };
 
     _ui->pushRight ( new ConsoleUi::Menu ( "Settings", options, "Back" ) );
@@ -1413,6 +1580,25 @@ void MainUi::settings()
                 system ( "@pause > nul" );
                 break;
 
+#ifdef ENABLE_STEAM
+            case 14:
+                _ui->pushInFront ( new ConsoleUi::Menu ( "Lobby / Matchmaking backend",
+                { "Steam", "Relay server" }, "Cancel" ),
+                { 0, 0 }, true ); // Don't expand but DO clear top
+
+                _ui->top<ConsoleUi::Menu>()->setPosition ( _config.getInteger ( "useSteamLobby" ) ? 0 : 1 );
+                _ui->popUntilUserInput();
+
+                if ( _ui->top()->resultInt >= 0 && _ui->top()->resultInt <= 1 )
+                {
+                    _config.setInteger ( "useSteamLobby", _ui->top()->resultInt == 0 ? 1 : 0 );
+                    saveConfig();
+                }
+
+                _ui->pop();
+                break;
+#endif
+
             default:
                 break;
         }
@@ -1531,6 +1717,9 @@ void MainUi::initialize()
     _config.setInteger ( "frameLimiter", 0 );
     _config.setInteger ( "stageAnimations", 1 );
     _config.setString ( "matchmakingRegion", "NA West" );
+    // Back the Server -> Lobby/Matchmaking menus with Steam when available (only meaningful in
+    // ENABLE_STEAM builds; falls back to the relay server if Steam can't initialize).
+    _config.setInteger ( "useSteamLobby", 1 );
     _config.setDouble ( "heldStartDuration", 1.5 );
     _config.setInteger ( "updateChannel", static_cast<int>(MainUpdater::Channel::Stable ) );
     _config.setInteger ( "trialScreenFlashColor", 0xff0000ff );
@@ -2014,7 +2203,9 @@ string MainUi::getUpdate ( bool isStartup )
         return "Cannot fetch info for " + _updater.getTargetDescName() + " version";
     }
 
-    if ( LocalVersion.isSimilar ( _updater.getTargetVersion(), ( _config.getInteger("updateChannel") - 1 ) ? 3 : 2 ) )
+    // Tag-only comparison: GitHub release tags carry no revision/buildTime, so both channels
+    // compare at suffix level (2). The channel still drives prerelease filtering in MainUpdater.
+    if ( LocalVersion.isSimilar ( _updater.getTargetVersion(), 2 ) )
     {
         _upToDate = true;
         if ( ! isStartup )
@@ -2261,7 +2452,7 @@ void MainUi::fetchProgress ( MainUpdater *updater, const MainUpdater::Type& type
     bar->update ( bar->length * progress );
 }
 
-void MainUi::connectionFailed ( Lobby *lobby )
+void MainUi::connectionFailed ( ILobbyBackend *lobby )
 {
     LOG( "mainUI Lobby Connection Failed" );
     EventManager::get().stop();
@@ -2269,14 +2460,14 @@ void MainUi::connectionFailed ( Lobby *lobby )
         unlock( lobby );
 }
 
-void MainUi::unlock ( Lobby *lobby )
+void MainUi::unlock ( ILobbyBackend *lobby )
 {
     LOG( "mainUI lobby unlock" );
     LOCK ( uiMutex );
     uiCondVar.signal();
 }
 
-void MainUi::connectionFailed ( MatchmakingManager *mmm )
+void MainUi::connectionFailed ( IMatchmakingBackend *mmm )
 {
     LOG( "mainUI mmm Connection Failed" );
     EventManager::get().stop();
@@ -2289,7 +2480,7 @@ void MainUi::connectionFailed ( MatchmakingManager *mmm )
     }
 }
 
-void MainUi::unlock ( MatchmakingManager *mmm )
+void MainUi::unlock ( IMatchmakingBackend *mmm )
 {
     LOG( "mainUI mmm unlock" );
     LOCK ( uiMutex );
@@ -2297,13 +2488,18 @@ void MainUi::unlock ( MatchmakingManager *mmm )
 }
 
 
-void MainUi::setAddr ( MatchmakingManager *mmm, string addr )
+void MainUi::setAddr ( IMatchmakingBackend *mmm, string addr )
 {
-    _address = addr;
+    // A steam:<id> address must be stored verbatim (the ':' would otherwise be parsed as a port);
+    // build the IpAddrPort directly like the Steam socket path does.
+    if ( addr.compare ( 0, 6, "steam:" ) == 0 )
+        _address = IpAddrPort ( addr, ( uint16_t ) 0 );
+    else
+        _address = addr;
 }
 
 
-void MainUi::setMode ( MatchmakingManager *mmm, string mode )
+void MainUi::setMode ( IMatchmakingBackend *mmm, string mode )
 {
     if ( mode == "Host" ) {
         initialConfig.mode.value = ClientMode::Host;

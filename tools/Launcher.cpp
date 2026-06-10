@@ -1,6 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "SentryClient.hpp"
+
 #include <string>
 #include <tr1/unordered_set>
 
@@ -25,6 +27,8 @@ bool hookDLL ( const string& dll_path, const PROCESS_INFORMATION *pi )
         char buffer[4096];
         snprintf ( buffer, sizeof ( buffer ), "Could not create remote thread [%d].", ( int ) GetLastError() );
 
+        SentryClient::captureMessage ( SentryClient::Level::Error, buffer );
+
         if ( popup_errors )
             MessageBox ( 0, buffer, "launcher error", MB_OK );
 
@@ -45,6 +49,8 @@ bool hookDLL ( const string& dll_path, const PROCESS_INFORMATION *pi )
     if ( ! hookedDLL )
     {
         TerminateProcess ( pi->hProcess, -1 );
+
+        SentryClient::captureMessage ( SentryClient::Level::Error, "Could not hook dll" );
 
         if ( popup_errors )
             MessageBox ( 0, "Could not hook dll", "launcher error", MB_OK );
@@ -87,6 +93,8 @@ bool hook ( const string& exe_path, const string& dll_path, bool high_priority, 
         snprintf ( buffer, sizeof ( buffer ), "Couldn't find exe='%s'\nError [%d].",
                    exe_path.c_str(), ( int ) GetLastError() );
 
+        SentryClient::captureMessage ( SentryClient::Level::Error, buffer );
+
         if ( popup_errors )
             MessageBox ( 0, buffer, "launcher error", MB_OK );
         return false;
@@ -97,6 +105,8 @@ bool hook ( const string& exe_path, const string& dll_path, bool high_priority, 
         char buffer[4096];
         snprintf ( buffer, sizeof ( buffer ), "Couldn't find dll='%s'\nError [%d].",
                    dll_path.c_str(), ( int ) GetLastError() );
+
+        SentryClient::captureMessage ( SentryClient::Level::Error, buffer );
 
         if ( popup_errors )
             MessageBox ( 0, buffer, "launcher error", MB_OK );
@@ -119,6 +129,8 @@ bool hook ( const string& exe_path, const string& dll_path, bool high_priority, 
         snprintf ( buffer, sizeof ( buffer ), "exe='%s'\ndir='%s'\nCould not create process [%d].",
                    exe_path.c_str(), dir_path.c_str(), ( int ) GetLastError() );
 
+        SentryClient::captureMessage ( SentryClient::Level::Error, buffer );
+
         if ( popup_errors )
             MessageBox ( 0, buffer, "launcher error", MB_OK );
         return false;
@@ -130,6 +142,8 @@ bool hook ( const string& exe_path, const string& dll_path, bool high_priority, 
     DWORD address;
     if ( ! getbase ( pi.hProcess, &address, &orig_code ) )
     {
+        SentryClient::captureMessage ( SentryClient::Level::Error, "Could not find entry point" );
+
         if ( popup_errors )
             MessageBox ( 0, "Could not find entry point", "launcher error", MB_OK | MB_ICONEXCLAMATION );
         return false;
@@ -152,6 +166,8 @@ bool hook ( const string& exe_path, const string& dll_path, bool high_priority, 
                 continue;
             Sleep ( 100 );
             TerminateProcess ( pi.hProcess, -1 );
+
+            SentryClient::captureMessage ( SentryClient::Level::Error, "Could not get thread context." );
 
             if ( popup_errors )
                 MessageBox ( 0, "Could not get thread context.", "launcher error", MB_OK );
@@ -190,6 +206,11 @@ int main ( int argc, char *argv[] )
         options.insert ( string ( argv[i] ) );
 
     popup_errors = ( options.find ( "--popup_errors" ) != options.end() );
+
+    // Crash/error reporting. No-op unless a DSN was baked in at build time.
+    SentryClient::init ( SENTRY_DSN, "", "", "" );
+    SentryClient::setTag ( "component", "launcher" );
+    SentryClient::installCrashHandler();
 
     // Create process and hook library.
     if ( argc > 2 && hook ( argv[1], argv[2], options.find ( "--high" ) != options.end(), options.find ( "--framestep" ) != options.end(), argv[3] ) )

@@ -7,9 +7,10 @@
 
 using namespace std;
 
-MatchmakingManager::MatchmakingManager( Owner* owner, IpAddrPort _address, string region )
-    : owner( owner ), _address( _address ), region( region )
+MatchmakingManager::MatchmakingManager( IMatchmakingBackend::Owner* owner, IpAddrPort _address, string region )
+    : _address( _address ), region( region )
 {
+    this->owner = owner;
     timeout = 1000;
     connectionSuccess = false;
     ignoreKb = false;

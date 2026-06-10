@@ -13,3 +13,13 @@ printf "    \"$COMMIT_ID\",\n"
 fi
 printf "    \"`date`\"\n"
 printf ");\n"
+
+# Also embed the version code as a plain string literal. LocalVersion.code is a std::string the
+# optimizer builds at runtime via immediate-mov instructions (e.g. "4.1." as a dword then '2','\0'
+# as byte stores), so the version never appears as a contiguous run in the optimized binary. The
+# exe's hook.dll compatibility check (targets/Main.cpp) searches the dll *file bytes* for that
+# version string, so without a literal copy a release build always reports "Incompatible hook.dll".
+# A const char[] is initialized data: its bytes land contiguously in .rodata and survive -Ofast and
+# strip (the link has no --gc-sections). extern + __attribute__((used)) keeps it from being elided.
+printf "extern const char LocalVersionCode[];\n"
+printf "const char LocalVersionCode[] __attribute__ ( ( used ) ) = \"$CODE\";\n"

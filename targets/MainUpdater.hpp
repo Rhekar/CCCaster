@@ -1,16 +1,15 @@
 #pragma once
 
 #include "Enum.hpp"
-#include "HttpDownload.hpp"
-#include "HttpGet.hpp"
+#include "Thread.hpp"
+#include "Timer.hpp"
 #include "Version.hpp"
 
 #include <string>
 
 
 class MainUpdater
-    : private HttpDownload::Owner
-    , private HttpGet::Owner
+    : private Timer::Owner
 {
 public:
 
@@ -39,8 +38,6 @@ public:
 
     bool extractArchive() const;
 
-    std::string getVersionFilePath() const;
-
     void setChannel(const Channel& channel) { _channel = channel; }
     void setTemporal(const Temporal& temporal) { _temporal = temporal; }
 
@@ -54,13 +51,20 @@ public:
 
 private:
 
+    // Worker thread that runs the (blocking) WinINet operation off the event loop.
+    struct FetchThread : public Thread
+    {
+        MainUpdater& updater;
+        Type type;
+
+        FetchThread ( MainUpdater& updater, const Type& type ) : updater ( updater ), type ( type ) {}
+
+        void run() override { updater.runFetch ( type ); }
+    };
+
+    friend struct FetchThread;
+
     Type _type;
-
-    std::shared_ptr<HttpGet> _httpGet;
-
-    std::shared_ptr<HttpDownload> _httpDownload;
-
-    uint32_t _currentServerIdx = 0;
 
     Channel _channel;
 
@@ -68,15 +72,37 @@ private:
 
     Version _targetVersion;
 
+    // Changelog body and download URL cached from the most recent Version fetch.
+    std::string _changelogBody;
+
+    std::string _assetUrl;
+
     std::string _downloadDir;
 
-    void doFetch ( const Type& type );
+    // Worker thread + the state it hands back to the polling timer (guarded by _mutex).
+    ThreadPtr _worker;
 
-    void httpResponse ( HttpGet *httpGet, int code, const std::string& data, uint32_t remainingBytes ) override;
-    void httpFailed ( HttpGet *httpGet ) override;
-    void httpProgress ( HttpGet *httpGet, uint32_t receivedBytes, uint32_t totalBytes ) override {}
+    TimerPtr _pollTimer;
 
-    void downloadComplete ( HttpDownload *httpDownload ) override;
-    void downloadFailed ( HttpDownload *httpDownload ) override;
-    void downloadProgress ( HttpDownload *httpDownload, uint32_t downloadedBytes, uint32_t totalBytes ) override;
+    mutable Mutex _mutex;
+
+    bool _done = false;
+
+    bool _success = false;
+
+    uint32_t _progDone = 0, _progTotal = 0;
+
+    // Runs on the worker thread.
+    void runFetch ( const Type& type );
+
+    bool fetchVersion();
+
+    bool parseReleases ( const std::string& body );
+
+    bool writeChangeLog();
+
+    bool downloadArchive();
+
+    // Runs on the event loop; polls the worker and dispatches owner callbacks.
+    void timerExpired ( Timer *timer ) override;
 };

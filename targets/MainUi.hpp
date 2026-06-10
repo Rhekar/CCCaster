@@ -6,8 +6,8 @@
 #include "ControllerManager.hpp"
 #include "KeyValueStore.hpp"
 #include "MainUpdater.hpp"
-#include "Lobby.hpp"
-#include "MatchmakingManager.hpp"
+#include "ILobbyBackend.hpp"
+#include "IMatchmakingBackend.hpp"
 
 #include <string>
 #include <memory>
@@ -24,14 +24,26 @@ inline int computeDelay ( double latency )
 }
 
 
+// Outcome of the most recent match, populated from the DLL's MatchResult IPC message (see
+// MainApp::ipcRead). The lobby queue reads this after a match's RUN() returns to advance the
+// king-of-the-hill order. `valid` is cleared before each match and set when a result arrives.
+struct MatchResultInfo
+{
+    bool valid = false;
+    bool hostWon = false;
+    uint8_t p1Wins = 0;
+    uint8_t p2Wins = 0;
+};
+
+
 class ConsoleUi;
 
 class MainUi
     : private Controller::Owner
     , private ControllerManager::Owner
     , private MainUpdater::Owner
-    , private Lobby::Owner
-    , private MatchmakingManager::Owner
+    , private ILobbyBackend::Owner
+    , private IMatchmakingBackend::Owner
 {
 public:
 
@@ -44,6 +56,10 @@ public:
     std::vector<std::string> lobbyText;
     std::vector<std::string> lobbyIps;
     std::vector<std::string> lobbyIds;
+
+    // Most recent match outcome, written by MainApp from the DLL's MatchResult IPC message and
+    // read by the lobby queue after a match (mirrors how sessionError is plumbed from MainApp).
+    MatchResultInfo lastMatchResult;
 
     MainUi();
 
@@ -81,9 +97,9 @@ private:
 
     std::shared_ptr<ConsoleUi> _ui;
 
-    std::shared_ptr<Lobby> _lobby;
+    std::shared_ptr<ILobbyBackend> _lobby;
 
-    std::shared_ptr<MatchmakingManager> _mmm;
+    std::shared_ptr<IMatchmakingBackend> _mmm;
 
     MainUpdater _updater;
 
@@ -150,12 +166,12 @@ private:
 
     void fetchProgress ( MainUpdater *updater, const MainUpdater::Type& type, double progress ) override;
 
-    void connectionFailed ( Lobby *lobby );
-    void unlock ( Lobby *lobby );
+    void connectionFailed ( ILobbyBackend *lobby ) override;
+    void unlock ( ILobbyBackend *lobby ) override;
 
-    void connectionFailed( MatchmakingManager* lobby );
-    void setAddr( MatchmakingManager* lobby, std::string addr );
-    void setMode( MatchmakingManager* lobby, std::string mode );
-    void unlock( MatchmakingManager* lobby );
+    void connectionFailed( IMatchmakingBackend* lobby ) override;
+    void setAddr( IMatchmakingBackend* lobby, std::string addr ) override;
+    void setMode( IMatchmakingBackend* lobby, std::string mode ) override;
+    void unlock( IMatchmakingBackend* lobby ) override;
 
 };

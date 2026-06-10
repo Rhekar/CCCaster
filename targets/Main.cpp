@@ -5,6 +5,7 @@
 #include "StringUtils.hpp"
 #include "ConsoleUi.hpp"
 #include "Version.hpp"
+#include "SentryClient.hpp"
 
 #include <optionparser.h>
 #include <windows.h>
@@ -24,6 +25,25 @@ vector<option::Option> opt;
 MainUi ui;
 
 string lastError;
+
+
+// Build type reported to Sentry as the "environment".
+static const char *sentryEnvironment()
+{
+#if defined(RELEASE)
+    return "release";
+#elif defined(LOGGING)
+    return "logging";
+#else
+    return "debug";
+#endif
+}
+
+// Route SentryClient diagnostics into the debug log.
+static void sentryLogSink ( const char *message )
+{
+    LOG ( "[sentry] %s", message );
+}
 
 
 void runMain ( const IpAddrPort& address, const Serializable& config );
@@ -405,6 +425,18 @@ int main ( int argc, char *argv[] )
 
     LOG ( "Running from: %s", ProcessManager::appDir );
 
+    // Initialize crash/error reporting now that logging is up (so its diagnostics are logged).
+    // No-op unless a DSN was baked in at build time. Installed after the signal handlers above so
+    // its SIGABRT hook chains back to signalHandler.
+    SentryClient::setLogSink ( sentryLogSink );
+    SentryClient::init ( SENTRY_DSN, LocalVersion.code, sentryEnvironment(), LocalVersion.revision );
+    SentryClient::setTag ( "component", "standalone" );
+    SentryClient::setTag ( "revision", LocalVersion.revision );
+    SentryClient::setTag ( "build_time", LocalVersion.buildTime );
+    if ( ProcessManager::isWine() )
+        SentryClient::setTag ( "wine", "1" );
+    SentryClient::installCrashHandler();
+
     // Log parsed command line opt
     for ( size_t i = 0; i < opt.size(); ++i )
     {
@@ -562,15 +594,18 @@ int main ( int argc, char *argv[] )
         }
         catch ( const Exception& exc )
         {
+            SentryClient::captureException ( "Exception", exc.str() );
             PRINT ( "%s", exc.user );
         }
 #ifdef NDEBUG
         catch ( const std::exception& exc )
         {
+            SentryClient::captureException ( "std::exception", exc.what() );
             PRINT ( "Error: %s", exc.what() );
         }
         catch ( ... )
         {
+            SentryClient::captureMessage ( SentryClient::Level::Fatal, "Unknown exception in ui.main" );
             PRINT ( "Unknown error!" );
         }
 #endif // NDEBUG

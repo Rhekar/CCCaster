@@ -4,6 +4,10 @@
 #include "ExternalIpAddress.hpp"
 #include "SmartSocket.hpp"
 #include "UdpSocket.hpp"
+#ifdef ENABLE_STEAM
+#include "SteamSocket.hpp"
+#include "SteamManager.hpp"
+#endif
 #include "Constants.hpp"
 #include "Exceptions.hpp"
 #include "Algorithms.hpp"
@@ -248,6 +252,13 @@ struct MainApp
 
         _.doDeinit = !EventManager::get().isRunning();
 
+#ifdef ENABLE_STEAM
+        // The SDR relay network must be ready before ConnectP2P / listen, or the connection tends
+        // to fail. It is usually already warm from the lobby; wait (bounded) just in case.
+        if ( clientMode.isSteam() )
+            SteamManager::get().waitRelayNetworkReady();
+#endif
+
         if ( clientMode.isHost() )
         {
             if ( !ui.isServer() ) {
@@ -274,15 +285,30 @@ struct MainApp
 
         if ( clientMode.isHost() )
         {
-            serverCtrlSocket = SmartSocket::listenTCP ( this, address.port );
-            address.port = serverCtrlSocket->address.port; // Update port in case it was initially 0
-            address.invalidate();
+#ifdef ENABLE_STEAM
+            if ( clientMode.isSteam() )
+            {
+                serverCtrlSocket = SteamSocket::listen ( this, STEAM_CTRL_VPORT );
+            }
+            else
+#endif
+            {
+                serverCtrlSocket = SmartSocket::listenTCP ( this, address.port );
+                address.port = serverCtrlSocket->address.port; // Update port in case it was initially 0
+                address.invalidate();
+            }
 
             LOG ( "serverCtrlSocket=%08x", serverCtrlSocket.get() );
         }
         else
         {
-            ctrlSocket = SmartSocket::connectTCP ( this, address, options[Options::Tunnel] );
+#ifdef ENABLE_STEAM
+            if ( clientMode.isSteam() )
+                ctrlSocket = SteamSocket::connect ( this, steamIdFromAddr ( address ), STEAM_CTRL_VPORT );
+            else
+#endif
+                ctrlSocket = SmartSocket::connectTCP ( this, address, options[Options::Tunnel] );
+
             LOG ( "ctrlSocket=%08x", ctrlSocket.get() );
 
             stopTimer.reset ( new Timer ( this ) );
@@ -436,10 +462,20 @@ struct MainApp
             ASSERT ( ctrlSocket.get() != 0 );
             ASSERT ( ctrlSocket->isConnected() == true );
 
-            try { serverDataSocket = SmartSocket::listenUDP ( this, address.port ); }
-            catch ( ... ) { serverDataSocket = SmartSocket::listenUDP ( this, 0 ); }
+#ifdef ENABLE_STEAM
+            if ( clientMode.isSteam() )
+            {
+                serverDataSocket = SteamSocket::listen ( this, STEAM_DATA_VPORT );
+                initialConfig.dataPort = 0; // unused for Steam (vports, not OS ports)
+            }
+            else
+#endif
+            {
+                try { serverDataSocket = SmartSocket::listenUDP ( this, address.port ); }
+                catch ( ... ) { serverDataSocket = SmartSocket::listenUDP ( this, 0 ); }
 
-            initialConfig.dataPort = serverDataSocket->address.port;
+                initialConfig.dataPort = serverDataSocket->address.port;
+            }
 
             LOG ( "serverDataSocket=%08x", serverDataSocket.get() );
         }
@@ -484,8 +520,13 @@ struct MainApp
             ASSERT ( ctrlSocket.get() != 0 );
             ASSERT ( ctrlSocket->isConnected() == true );
 
-            dataSocket = SmartSocket::connectUDP ( this, { address.addr, this->initialConfig.dataPort },
-                                                   ctrlSocket->getAsSmart().isTunnel() );
+#ifdef ENABLE_STEAM
+            if ( clientMode.isSteam() )
+                dataSocket = SteamSocket::connect ( this, steamIdFromAddr ( address ), STEAM_DATA_VPORT );
+            else
+#endif
+                dataSocket = SmartSocket::connectUDP ( this, { address.addr, this->initialConfig.dataPort },
+                                                       ctrlSocket->getAsSmart().isTunnel() );
             LOG ( "dataSocket=%08x", dataSocket.get() );
 
             ui.display (
@@ -909,7 +950,12 @@ struct MainApp
             // Only connect the dataSocket if isClient
             if ( clientMode.isClient() )
             {
-                dataSocket = SmartSocket::connectUDP ( this, address, ctrlSocket->getAsSmart().isTunnel() );
+#ifdef ENABLE_STEAM
+                if ( clientMode.isSteam() )
+                    dataSocket = SteamSocket::connect ( this, steamIdFromAddr ( address ), STEAM_DATA_VPORT );
+                else
+#endif
+                    dataSocket = SmartSocket::connectUDP ( this, address, ctrlSocket->getAsSmart().isTunnel() );
                 LOG ( "dataSocket=%08x", dataSocket.get() );
             }
 
@@ -1178,7 +1224,12 @@ struct MainApp
         procMan.ipcSend ( options );
         procMan.ipcSend ( ControllerManager::get().getMappings() );
         procMan.ipcSend ( clientMode );
-        procMan.ipcSend ( new IpAddrPort ( address.getAddrInfo()->ai_addr ) );
+#ifdef ENABLE_STEAM
+        if ( clientMode.isSteam() )
+            procMan.ipcSend ( new IpAddrPort ( address ) ); // raw "steam:<id>"; do NOT DNS-resolve
+        else
+#endif
+            procMan.ipcSend ( new IpAddrPort ( address.getAddrInfo()->ai_addr ) );
 
         if ( clientMode.isSpectate() )
         {
@@ -1218,6 +1269,13 @@ struct MainApp
                 netplayConfig = msg->getAs<NetplayConfig>();
                 isBroadcastPortReady = true;
                 updateStatusMessage();
+                return;
+
+            case MsgType::MatchResult:
+                ui.lastMatchResult.valid = true;
+                ui.lastMatchResult.hostWon = msg->getAs<MatchResult>().hostWon;
+                ui.lastMatchResult.p1Wins = msg->getAs<MatchResult>().p1Wins;
+                ui.lastMatchResult.p2Wins = msg->getAs<MatchResult>().p2Wins;
                 return;
 
             case MsgType::IpAddrPort:
@@ -1272,6 +1330,15 @@ struct MainApp
                 serverDataSocket.reset();
                 ctrlSocket.reset();
                 serverCtrlSocket.reset();
+
+#ifdef ENABLE_STEAM
+                // Shut Steam down in the launcher BEFORE spawning the game, so the injected
+                // DLL can SteamAPI_Init under App ID 411370 without two processes holding it
+                // at once. Releases the ref taken by MainUi::steam(); the in-game leg
+                // re-establishes the P2P connection by SteamID.
+                if ( clientMode.isSteam() )
+                    SteamManager::get().deref();
+#endif
             }
 
             DWORD val = GetFileAttributes ( ( ProcessManager::appDir + "framestep.dll" ).c_str() );
@@ -1447,6 +1514,21 @@ private:
 
         if ( clientMode.isBroadcast() && !isBroadcastPortReady )
             return;
+
+#ifdef ENABLE_STEAM
+        // Steam matches have no IP/port to share - show the lobby join code instead.
+        if ( clientMode.isSteam() )
+        {
+            if ( clientMode.isHost() )
+            {
+                ui.display ( format ( "Hosting via Steam%s\n\nJoin code: %s\n\nWaiting for opponent...",
+                                      ( clientMode.isTraining() ? " (training mode)" : "" ),
+                                      SteamManager::get().lobbyCode().c_str() ) );
+                ui.hostReady();
+            }
+            return;
+        }
+#endif
 
         const uint16_t port = ( clientMode.isBroadcast() ? netplayConfig.broadcastPort : address.port );
         if ( ui.isServer() ) {

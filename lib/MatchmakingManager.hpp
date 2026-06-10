@@ -1,5 +1,6 @@
 #pragma once
 
+#include "IMatchmakingBackend.hpp"
 #include "ConsoleUi.hpp"
 #include "Socket.hpp"
 #include "Timer.hpp"
@@ -8,37 +9,31 @@
 
 #define DEFAULT_GET_TIMEOUT ( 5000 )
 
+// Relay server-backed matchmaking (the "fallback" backend). A background Thread connects to the
+// matchmaking server (MMSTART,region) and is told HOST or CLIENT,<addr>, signalling MainUi's
+// uiCondVar via the IMatchmakingBackend::Owner callbacks. See SteamMatchmaking for the
+// Steam-backed implementation of the same interface.
 class MatchmakingManager
     : Socket::Owner
     , Timer::Owner
-    , public KeyboardManager::Owner
     , public Thread
+    , public IMatchmakingBackend
 {
 public:
-    struct Owner
-    {
-        virtual void connectionFailed( MatchmakingManager* lobby ) = 0;
-        virtual void setAddr( MatchmakingManager* lobby, std::string addr ) = 0;
-        virtual void setMode( MatchmakingManager* lobby, std::string mode ) = 0;
-        virtual void unlock( MatchmakingManager* lobby ) = 0;
-    };
 
-    Owner *owner = 0;
+    MatchmakingManager ( IMatchmakingBackend::Owner* owner, IpAddrPort _address, std::string region );
 
-    MatchmakingManager ( Owner* owner, IpAddrPort _address, std::string region );
-
-    void stop();
+    void start() override { Thread::start(); }
+    bool isRunning() override { return Thread::isRunning(); }
+    void stop() override;
 
     void connect();
     void disconnect();
 
-    void sendHostReady();
+    void sendHostReady() override;
 
     uint64_t timeout;
     IpAddrPort _address;
-    bool connectionSuccess;
-    bool matchSuccess;
-    bool ignoreKb;
 
     Mutex hostMutex;
     CondVar hostCondVar;
