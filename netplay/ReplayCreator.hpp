@@ -5,6 +5,7 @@
 #define FILE_HEADER "MBAAReplayFile\0\0"
 #define UNK1 0x040000c0
 
+#include <stdint.h>
 #include <iostream>
 #include <vector>
 #include <string>

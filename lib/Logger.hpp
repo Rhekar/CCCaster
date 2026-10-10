@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "Thread.hpp"
 #include "StringUtils.hpp"
 
