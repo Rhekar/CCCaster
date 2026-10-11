@@ -35,6 +35,16 @@ struct __attribute__((packed)) RepRound
     char               unk2[0x1C];
 };
 
+// One player's replay recorder state at a rollback save point: length of the run list in bytes, index of the active run,
+// both frame totals, and the active run itself
+struct RepTrackSnapshot
+{
+    int len;
+    int active;
+    int total1;
+    int total2;
+    RepInputState last;
+};
 
 class DllRollbackManager
 {
@@ -67,6 +77,11 @@ private:
 
         // The pointer to the raw bytes in the state pool
         char *rawBytes;
+
+        // The replay recorder at the time this state was saved, and the number of round entries in the recorder table
+        // (identifies the round the snapshot belongs to)
+        RepTrackSnapshot repTrack[4];
+        int repRoundCount;
 
         // Save / load the game state
         void save();
