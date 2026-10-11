@@ -16,6 +16,101 @@ extern const unsigned char binary_res_rollback_bin_end;
 // Deserialized rollback memory data
 static MemDumpList allAddrs;
 
+// The game's replay recorder for the round being played, or 0 outside of a recorded round
+static RepRound *currentRepRound()
+{
+    RepRound *end = *( RepRound ** ) CC_REPROUND_TBL_ENDPTR_ADDR;
+
+    if ( !end )
+        return 0;
+
+    RepRound *round = end - 1;
+    return ( round->inputs ? round : 0 );
+}
+
+// Number of round entries in the game's replay recorder table
+static int repRoundCount()
+{
+    const char *begin = *( char ** ) ( ( char * ) CC_REPROUND_TBL_ENDPTR_ADDR - 4 );
+    const char *end = *( char ** ) CC_REPROUND_TBL_ENDPTR_ADDR;
+
+    return ( ( begin && end >= begin ) ? ( end - begin ) / sizeof ( RepRound ) : 0 );
+}
+
+// Remember where the replay recorder is, so that a rollback can return it to exactly this point.
+// The recorder appends one input per simulated tick, which is not one per real frame (slow motion, hit freeze), so
+// erasing one input per rolled back frame removes inputs that are never recorded again.
+static void snapshotRepTracks ( RepTrackSnapshot *snapshots )
+{
+    RepRound *round = currentRepRound();
+
+    for ( int i = 0; i < 4; ++i )
+    {
+        memset ( &snapshots[i], 0, sizeof ( RepTrackSnapshot ) );
+
+        if ( !round || !round->inputs[i].states )
+            continue;
+
+        const RepInputContainer& inputs = round->inputs[i];
+
+        snapshots[i].len = inputs.statesEnd - ( char * ) inputs.states;
+        snapshots[i].active = inputs.activeIndex;
+        snapshots[i].total1 = inputs.totalFrameCount;
+        snapshots[i].total2 = inputs.totalFrameCount2;
+
+        if ( snapshots[i].len >= ( int ) sizeof ( RepInputState ) )
+            snapshots[i].last = * ( RepInputState * ) ( inputs.statesEnd - sizeof ( RepInputState ) );
+    }
+}
+
+// Return the replay recorder to the state it was in when the snapshots were taken.
+// Appending only ever changes the active run or adds a new one, so this is exact.
+static void restoreRepTracks ( const RepTrackSnapshot *snapshots, int savedRoundCount )
+{
+    RepRound *round = currentRepRound();
+
+    if ( !round )
+    {
+        LOG ( "Missing replay table or inputs" );
+        return;
+    }
+
+    if ( savedRoundCount != repRoundCount() )
+    {
+        LOG ( "Saved state is from a different round; leaving replay inputs as is" );
+        return;
+    }
+
+    // Assumes there are always containers for 4 players in input container table; may not be true
+    for ( int i = 0; i < 4; ++i )
+    {
+        RepInputContainer& inputs = round->inputs[i];
+
+        if ( !inputs.states )
+            continue;
+
+        const RepTrackSnapshot& snapshot = snapshots[i];
+        const int len = inputs.statesEnd - ( char * ) inputs.states;
+
+        if ( snapshot.len < 0 || snapshot.len > len || ( snapshot.len % sizeof ( RepInputState ) ) )
+        {
+            LOG ( "Cannot restore replay inputs for p%d: saved length %d, current length %d", i + 1, snapshot.len, len );
+            continue;
+        }
+
+        // Erase the runs appended after the save point
+        memset ( ( char * ) inputs.states + snapshot.len, 0, len - snapshot.len );
+        inputs.statesEnd = ( char * ) inputs.states + snapshot.len;
+        inputs.activeIndex = snapshot.active;
+        inputs.totalFrameCount = snapshot.total1;
+        inputs.totalFrameCount2 = snapshot.total2;
+
+        // The active run's frame count at the save point
+        if ( snapshot.len >= ( int ) sizeof ( RepInputState ) )
+            * ( RepInputState * ) ( inputs.statesEnd - sizeof ( RepInputState ) ) = snapshot.last;
+    }
+}
+
 template<typename T>
 static inline void deleteArray ( T *ptr ) { delete[] ptr; }
 
@@ -112,6 +207,9 @@ void DllRollbackManager::saveState ( const NetplayManager& netMan )
         _memoryPool.get() + _freeStack.top()
     };
 
+    snapshotRepTracks ( state.repTrack );
+    state.repRoundCount = repRoundCount();
+
     _freeStack.pop();
     state.save();
     _statesList.push_back ( state );
@@ -149,12 +247,6 @@ bool DllRollbackManager::loadState ( IndexedFrame indexedFrame, NetplayManager& 
             netMan._indexedFrame = it->indexedFrame;
             it->load();
 
-            // Count the number of frames rolled back
-            int rbFrames;
-            if ( !netMan.config.mode.isTraining() ) {
-                rbFrames = _statesList.back().indexedFrame.value - it->indexedFrame.value;
-                LOG("Rolled back %i frames", rbFrames);
-            }
             // Erase all other states after the current one.
             // Note: it.base() returns 1 after the position of it, but moving forward.
             for ( auto jt = it.base(); jt != _statesList.end(); ++jt )
@@ -163,44 +255,8 @@ bool DllRollbackManager::loadState ( IndexedFrame indexedFrame, NetplayManager& 
             }
 
             // Disable rollback for input history if in training mode
-            if ( !netMan.config.mode.isTraining() ) {
-                LOG( "Fixing input history for rbFrames %d", rbFrames );
-                // Erase one frame of inputs from the game's replay structs for each frame rolled back.
-                for (; rbFrames > 0; rbFrames--) {
-                    if (!*(RepRound**)CC_REPROUND_TBL_ENDPTR_ADDR) {
-                        LOG( "Missing replay table" );
-                        break;
-                    }
-                    RepRound* curRound = (*(RepRound**)CC_REPROUND_TBL_ENDPTR_ADDR - 1);
-                    LOG( "%d", curRound );
-                    if (!curRound->inputs) {
-                        LOG( "Missing inputs" );
-                        break;
-                    }
-                    // Assumes there are always containers for 4 players in input container table; may not be true
-                    for (int i=0; i<4; i++) {
-                        RepInputContainer* inputs = &(curRound->inputs[i]);
-                        if (!inputs->states) {
-                            LOG( "player %d no states", i );
-                            continue;
-                        }
-                        RepInputState* state = &(inputs->states[inputs->activeIndex]);
-                        if (!state->frameCount) {
-                            LOG( "player %d no framecount", i+1 );
-                            continue;
-                        }
-                        if (state->frameCount == 1) {
-                            memset(state, 0, sizeof(RepInputState));
-                            inputs->statesEnd -= sizeof(RepInputState);
-                            LOG("Replay state %i for p%i has frame count 1; decrementing index", inputs->activeIndex, i+1);
-                            inputs->activeIndex--;
-                        } else {
-                            LOG("Replay state %i for p%i has frame count %i; decrementing count", inputs->activeIndex, i+1, state->frameCount);
-                            state->frameCount--;
-                        }
-                    }
-                }
-            }
+            if ( !netMan.config.mode.isTraining() )
+                restoreRepTracks ( it->repTrack, it->repRoundCount );
 
             _statesList.erase ( it.base(), _statesList.end() );
 
