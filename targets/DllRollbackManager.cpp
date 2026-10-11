@@ -174,7 +174,7 @@ void DllRollbackManager::deallocateStates()
     _statesList.clear();
 }
 
-void DllRollbackManager::saveState ( const NetplayManager& netMan )
+void DllRollbackManager::saveState ( const NetplayManager& netMan, bool withSfx )
 {
     if ( _freeStack.empty() )
     {
@@ -213,6 +213,9 @@ void DllRollbackManager::saveState ( const NetplayManager& netMan )
     _freeStack.pop();
     state.save();
     _statesList.push_back ( state );
+
+    if ( !withSfx )
+        return;
 
     uint8_t *currentSfxArray = &_sfxHistory [ netMan.getFrame() % NUM_ROLLBACK_STATES ][0];
     memcpy ( currentSfxArray, AsmHacks::sfxFilterArray, CC_SFX_ARRAY_LEN );

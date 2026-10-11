@@ -55,7 +55,8 @@ public:
     void deallocateStates();
 
     // Save / load current game state
-    void saveState ( const NetplayManager& netMan );
+    // The sound history is left alone with withSfx=false, for re-run frames where saveRerunSounds has rewritten it
+    void saveState ( const NetplayManager& netMan, bool withSfx = true );
     bool loadState ( IndexedFrame indexedFrame, NetplayManager& netMan );
 
     // Save sounds during rollback re-run

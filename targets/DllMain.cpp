@@ -938,10 +938,14 @@ struct DllMain
 
     void frameStepRerun()
     {
-        // Here we don't save any game states while re-running because the inputs are faked
-
         // Save sound state during rollback re-run
         rollMan.saveRerunSounds ( netMan.getFrame() );
+
+        // Save a game state for each re-run frame too. Loading a state erases all later states, so without this a
+        // misprediction during or right after a re-run can only fall back to the state from before the rollback, and the
+        // rollback depth grows past the configured window. The inputs are the corrected ones, same as a normal frame.
+        if ( netMan.getState().value == NetplayState::InGame && netMan.getRollback() )
+            rollMan.saveState ( netMan, false );
 
         if ( netMan.getIndexedFrame().value >= fastFwdStopFrame.value )
         {
