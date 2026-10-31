@@ -121,13 +121,15 @@ void DX9_HooksInit ( IDirect3DDevice9 *pDevice )
     *m_Hook_Release = ( UINT_PTR ) DX9_Release;
 }
 
-void DX9_HooksVerify ( IDirect3DDevice9 *pDevice )
+void __attribute__ ((noinline)) DX9_HooksVerify ( IDirect3DDevice9 *pDevice )
 {
     // It looks like at certain points, vtable entries get restored to its original values.
     // If that happens, we need to re-assign them to our functions again.
     // NOTE: we don't want blindly re-assign, because there can be other programs
     // hooking on the same methods. Therefore, we only re-assign if we see that
     // original addresses are restored by the system.
+
+	// this is something which could/should be optimized. called 820 times a frame.
 
     UINT_PTR *pVTable = ( UINT_PTR * ) ( * ( ( UINT_PTR * ) pDevice ) );
     assert ( pVTable );
@@ -197,6 +199,11 @@ EXTERN_C HRESULT __declspec ( dllexport ) __stdcall DX9_Reset ( IDirect3DDevice9
     return hRes;
 }
 
+HRESULT __attribute__ ((noinline)) actuallyDoPresent(IDirect3DDevice9 *pDevice, const RECT *src, const RECT *dest, HWND hwnd, LPVOID unused) {
+	HRESULT hRes = s_D3D9_Present ( pDevice, src, dest, hwnd, unused );
+	return hRes;
+}
+
 EXTERN_C HRESULT __declspec ( dllexport ) __stdcall DX9_Present (
     IDirect3DDevice9 *pDevice, const RECT *src, const RECT *dest, HWND hwnd, LPVOID unused )
 {
@@ -217,7 +224,8 @@ EXTERN_C HRESULT __declspec ( dllexport ) __stdcall DX9_Present (
     PresentFrameBegin ( pDevice );
 
     // call real Present()
-    HRESULT hRes = s_D3D9_Present ( pDevice, src, dest, hwnd, unused );
+    //HRESULT hRes = s_D3D9_Present ( pDevice, src, dest, hwnd, unused );
+	HRESULT hRes = actuallyDoPresent(pDevice, src, dest, hwnd, unused );
 
     PresentFrameEnd ( pDevice );
 

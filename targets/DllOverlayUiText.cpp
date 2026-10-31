@@ -4,6 +4,7 @@
 #include "DllTrialManager.hpp"
 #include "ProcessManager.hpp"
 #include "Enum.hpp"
+#include "Constants.hpp"
 
 #include <windows.h>
 #include <d3dx9.h>
@@ -18,9 +19,11 @@ using namespace DllOverlayUi;
 
 #define OVERLAY_FONT                    "Tahoma"
 
-#define OVERLAY_FONT_HEIGHT             ( 14 )
+#define SCALE_FACTOR ((float)(*INITIAL_SCREEN_HEIGHT) / 640.0)
 
-#define OVERLAY_FONT_WIDTH              ( 5 )
+#define OVERLAY_FONT_HEIGHT             ((int)( 14.0 * SCALE_FACTOR))
+
+#define OVERLAY_FONT_WIDTH              ((int)( 5.0 * SCALE_FACTOR))
 
 #define OVERLAY_FONT_WEIGHT             ( 600 )
 
@@ -50,6 +53,7 @@ using namespace DllOverlayUi;
 
 #define INLINE_RECT(rect)               rect.left, rect.top, rect.right, rect.bottom
 
+#define CHAT_BOX_COLOR      			D3DCOLOR_XRGB ( 66, 229, 244 )
 
 ENUM ( State, Disabled, Disabling, Enabled, Enabling );
 
@@ -74,6 +78,17 @@ static ID3DXFont *font = 0;
 static IDirect3DVertexBuffer9 *background = 0;
 
 static array<string, 2> selectorLine;
+
+static IDirect3DDevice9* _device = NULL; 
+static D3DVIEWPORT9 _viewport;
+
+struct Vertex
+{
+    FLOAT x, y, z;
+    DWORD color;
+
+    static const DWORD Format = ( D3DFVF_XYZ | D3DFVF_DIFFUSE );
+};
 
 namespace DllOverlayUi
 {
@@ -224,6 +239,10 @@ bool isMapping()
     return mode == Mode::Mapping;
 }
 
+void setNoneMode() {
+	mode = Mode::None;
+}
+
 void setTrial()
 {
     mode = Mode::Trial;
@@ -312,6 +331,44 @@ bool isShowingMessage()
     return ( messageTimeout > 0 );
 }
 
+void showChatMessage(int index, const ChatMessage& m) {
+
+	long startHeight = (long)(_viewport.Height) - (index * OVERLAY_FONT_HEIGHT); 
+
+	if(startHeight < 0) {
+		return;
+	}
+
+	RECT r {0, startHeight, (long)_viewport.Width, startHeight + OVERLAY_FONT_HEIGHT};
+
+	std::string msg;
+	if(m.player == 0) {
+		msg = m.msg;
+	} else {
+		msg = "P" + std::to_string(m.player) + ": " + m.msg;
+	}
+    DrawText ( font, msg, r, DT_WORDBREAK | DT_LEFT, OVERLAY_TEXT_COLOR );
+}
+
+void showTypingDialogue(const std::string& m) {
+	
+	if(_device == NULL) { // praying i dont have to deal with device loss here and its done elsewhere in the code
+		return;
+	}
+
+	//DrawRectangle ( _device, INLINE_RECT(r), OVERLAY_COMBO_BG_COLOR );
+	// i would love to draw something transparent, but in the interest of not copying over my entire etm draw code, i dont care.
+	
+	RECT r {0, ((long)_viewport.Height) - ((long)OVERLAY_FONT_HEIGHT), (long)_viewport.Width, (long)_viewport.Height};
+
+	std::string msg = "Typing: " + m;
+
+	DrawBox(_device, INLINE_RECT(r), 1, CHAT_BOX_COLOR);
+
+	DrawText ( font, msg, r, DT_WORDBREAK | DT_LEFT, OVERLAY_TEXT_COLOR );
+}
+
+
 #ifndef RELEASE
 
 string debugText;
@@ -321,16 +378,6 @@ int debugTextAlign = 0;
 #endif // NOT RELEASE
 
 } // namespace DllOverlayUi
-
-
-struct Vertex
-{
-    FLOAT x, y, z;
-    DWORD color;
-
-    static const DWORD Format = ( D3DFVF_XYZ | D3DFVF_DIFFUSE );
-};
-
 
 
 void initOverlayText ( IDirect3DDevice9 *device )
@@ -385,8 +432,11 @@ void invalidateOverlayText()
     }
 }
 
-void renderOverlayText ( IDirect3DDevice9 *device, const D3DVIEWPORT9& viewport )
+void __attribute__ ((noinline)) renderOverlayText ( IDirect3DDevice9 *device, const D3DVIEWPORT9& viewport )
 {
+	_device = device;
+	_viewport = viewport;
+
 #ifndef RELEASE
 
     if ( ! debugText.empty() )
@@ -495,7 +545,7 @@ void renderOverlayText ( IDirect3DDevice9 *device, const D3DVIEWPORT9& viewport 
     D3DXMatrixTranslation ( &translate, 0.0f, 1.0f - scaleY, 0.0f );
 
     device->SetTexture ( 0, 0 );
-    device->SetTransform ( D3DTS_VIEW, & ( scale = scale * translate ) );
+    device->SetTransform ( D3DTS_VIEW, & ( scale = scale * translate ) ); // who wrote this syntax. what the hell
     device->SetStreamSource ( 0, background, 0, sizeof ( Vertex ) );
     device->SetFVF ( Vertex::Format );
     device->DrawPrimitive ( D3DPT_TRIANGLESTRIP, 0, 2 );

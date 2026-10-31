@@ -1,0 +1,215 @@
+im need gcc 14 for the gcodeview thingy, for better crash debug info
+
+
+ubuntu, however, only has mingw up to gcc 13
+
+i could switch to debian, i run debian on everything but this wsl install, why do i do this
+
+
+clang pain
+i need this flag if i want debug bs to work between the 3 god forsaken compilers that are being used in melty rn
+which means i need to either install debian, or build mingw from source because i need gcc>=14 in order to have this flag, and 
+im not installing debian 
+
+sudo apt install build-essential bison flex texinfo wget gawk gcc-multilib g++-multilib mingw-w64 mingw-w64-tools
+wget https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz
+tar -xf gcc-16.2.0.tar.xz
+cd gcc-16.2.0
+./contrib/download_prerequisites
+mkdir ../gcc-16.2-build
+cd ../gcc-16.2-build
+NOTTHISONE ../gcc-16.2.0/configure --target=i686-w64-mingw32 --with-sysroot=/opt/mingw/i686-w64-mingw32 --prefix=/opt/mingw --enable-languages=c,c++ --enable-threads=win32 --disable-multilib --disable-nls --disable-werror
+sudo mkdir -p /usr/local/i686-w64-mingw32/include
+sudo mkdir -p /usr/local/i686-w64-mingw32/lib
+sudo mkdir -p /usr/local/i686-w64-mingw32/bin
+sudo cp -a /usr/i686-w64-mingw32/include/. /usr/local/i686-w64-mingw32/include/
+sudo cp -a /usr/i686-w64-mingw32/lib/. /usr/local/i686-w64-mingw32/lib/
+sudo mkdir -p /usr/i686-w64-mingw32/mingw
+sudo ln -s /usr/i686-w64-mingw32/include /usr/i686-w64-mingw32/mingw/include
+sudo ln -s /usr/i686-w64-mingw32/lib /usr/i686-w64-mingw32/mingw/lib
+sudo mkdir -p /usr/i686-w64-mingw32/mingw
+sudo ln -s /usr/i686-w64-mingw32/include /usr/i686-w64-mingw32/mingw/include
+../gcc-16.2.0/configure --target=i686-w64-mingw32 --prefix=/opt/mingw --with-native-system-header-dir=/i686-w64-mingw32/include --with-sysroot=/usr --enable-languages=c,c++ --enable-threads=win32 --disable-multilib --disable-nls --disable-werror
+pray to your gods
+make -j$(nproc)
+make
+look, i dont know why, but i had to run it twice?
+sudo make install
+
+if i686-w64-mingw32-g++ -v isnt 16, make sure to blow your shit smooth off, or just disable gcodeview. but ill know. and ill be disappointed
+
+dear god, after 4 hours of wanting to explode
+https://github.com/brechtsanders/winlibs_mingw/releases/tag/14.2.0win32-12.0.0-msvcrt-r1
+its 14, and has win32 threads, like i need
+and seh? apparently
+get winlibs-x86_64-win32-seh-gcc-14.2.0-mingw-w64msvcrt-12.0.0-r1.7z
+nope im dumb thats for windows
+
+-----
+
+ok, how about this:
+ugh
+
+i think you might need to uninstall existing i686 mingw if needed
+
+sudo apt update
+
+sudo apt install build-essential bison flex texinfo wget git gawk python3 libgmp-dev libmpfr-dev libmpc-dev libisl-dev zlib1g-dev libzstd-dev
+sudo mkdir -p /opt/mingw14
+sudo chown "$USER:$USER" /opt/mingw14
+mkdir -p ~/buildingMingw
+cd ~/buildingMingw
+wget https://ftp.gnu.org/gnu/binutils/binutils-2.43.1.tar.xz
+tar xf binutils-2.43.1.tar.xz
+mkdir binutils-build
+cd binutils-build
+../binutils-2.43.1/configure --target=i686-w64-mingw32 --prefix=/opt/mingw14 --with-sysroot=/opt/mingw14 --disable-nls --disable-werror
+make -j$(nproc)
+make install
+cd ~/buildingMingw
+wget https://sourceforge.net/projects/mingw-w64/files/mingw-w64/mingw-w64-release/mingw-w64-v14.0.0.tar.bz2/download -O mingw-w64-v14.0.0.tar.bz2
+tar xf mingw-w64-v14.0.0.tar.bz2
+cd mingw-w64-v14.0.0
+mkdir build-headers
+cd build-headers
+../mingw-w64-headers/configure --host=i686-w64-mingw32 --prefix=/opt/mingw14/i686-w64-mingw32
+make install
+cd ~/buildingMingw/mingw-w64-v14.0.0
+mkdir build-crt
+cd build-crt
+../mingw-w64-crt/configure --host=i686-w64-mingw32 --prefix=/opt/mingw14/i686-w64-mingw32 --enable-lib32 --enable-wildcard 
+make -j$(nproc)
+make install
+cd ~/buildingMingw
+wget https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.xz
+tar xf gcc-14.2.0.tar.xz
+cd gcc-14.2.0
+./contrib/download_prerequisites
+cd ~/buildingMingw
+mkdir gcc-14.2-build
+cd gcc-14.2-build
+#../gcc-14.2.0/configure --target=i686-w64-mingw32 --prefix=/opt/mingw14 --with-sysroot=/opt/mingw14 --enable-languages=c,c++ --enable-threads=posix --disable-multilib --disable-nls --disable-shared --disable-libssp --disable-libvtv --disable-libgomp --disable-libquadmath --disable-werror
+../gcc-14.2.0/configure --target=i686-w64-mingw32 --prefix=/opt/mingw14 --with-sysroot=/opt/mingw14 --enable-languages=c,c++ --enable-threads=win32 --disable-multilib --disable-nls --disable-werror
+#sudo mkdir -p /opt/mingw14/mingw
+sudo ln -s /opt/mingw14/i686-w64-mingw32/include /opt/mingw14/mingw/include
+sudo ln -s /opt/mingw14/mingw/include /opt/mingw14/ 
+make -j$(nproc) all-gcc
+make install-gcc
+make -j$(nproc)
+make install
+
+and NOW
+/opt/mingw14/bin/i686-w64-mingw32-g++ -v
+
+should run
+
+add 
+export PATH=/opt/mingw14/bin:$PATH
+to ur bashrc or whatever
+
+im so tired
+i wonder if anyone reads these
+hihi
+
+one thing which confuses me is that the default i686 mingw gcc had win32 threads and worked, but when i built this one,, caster also needs pthread? why did that not error earliermake 
+
+ok so that didnt work, time for some more bs 
+
+-----
+
+sudo apt update
+sudo apt install -y build-essential bison flex texinfo wget curl git gawk libgmp-dev libmpfr-dev libmpc-dev libisl-dev zlib1g-dev libzstd-dev python3
+
+mkdir -p ~/mingw-gcc14/src
+mkdir -p ~/mingw-gcc14/build-binutils
+mkdir -p ~/mingw-gcc14/build-gcc
+
+cd ~/mingw-gcc14/src
+
+wget https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.xz
+wget https://ftp.gnu.org/gnu/binutils/binutils-2.43.1.tar.xz
+
+tar -xf gcc-14.2.0.tar.xz
+tar -xf binutils-2.43.1.tar.xz
+
+git clone --depth 1 --branch v12.0.0 https://github.com/mingw-w64/mingw-w64.git
+
+cd ~/mingw-gcc14/build-binutils
+../src/binutils-2.43.1/configure --target=i686-w64-mingw32 --prefix=/opt/mingw-gcc14 --with-sysroot=/opt/mingw-gcc14/i686-w64-mingw32 --disable-nls --disable-werror
+
+make -j$(nproc)
+sudo make install
+
+export PATH=/opt/mingw-gcc14/bin:$PATH
+
+
+cd ~/mingw-gcc14/src/mingw-w64/mingw-w64-headers
+./configure --host=i686-w64-mingw32 --prefix=/opt/mingw-gcc14/i686-w64-mingw32
+
+make
+sudo make install
+
+cd ~/mingw-gcc14/src/gcc-14.2.0
+./contrib/download_prerequisites
+
+cd ~/mingw-gcc14/build-gcc
+../src/gcc-14.2.0/configure --target=i686-w64-mingw32 --prefix=/opt/mingw-gcc14 --with-sysroot=/opt/mingw-gcc14 --with-native-system-header-dir=/include --enable-languages=c,c++ --disable-multilib --disable-nls --disable-shared --disable-libssp --disable-libvtv --disable-libgomp --disable-libquadmath --disable-libatomic --disable-libstdcxx-pch --enable-threads=win32
+
+sudo mkdir /opt/mingw-gcc14/include 
+
+make -j$(nproc) all-gcc all-target-libgcc
+sudo make install-gcc install-target-libgcc
+
+
+cd ~/mingw-gcc14/src/mingw-w64/mingw-w64-crt
+./configure --host=i686-w64-mingw32 --prefix=/opt/mingw-gcc14/i686-w64-mingw32
+
+make -j$(nproc)
+sudo make install
+
+cd ~/mingw-gcc14/build-gcc
+make -j$(nproc)
+sudo make install
+
+
+ i686-w64-mingw32-g++ # hopefully displays opt
+
+WE NOW NEED TO BUILD MORE THINGS 
+
+cd ~/mingw-gcc14/src/mingw-w64/mingw-w64-libraries/winpthreads
+./configure --host=i686-w64-mingw32 --prefix=/opt/mingw-gcc14/i686-w64-mingw32
+make -j$(nproc)
+sudo make install
+
+
+export PATH=/opt/mingw-gcc14/bin:$PATH
+
+add wherever pthread is to the includes if thats an issue for you
+
+oh my god 
+i finally build it, and what happens
+
+the same ambigious format error from clang 
+so ig gcc 14 also made c++ more c++
+and there is no way around fixing that
+
+gcc 14 or something is now supporting some std format
+weird, thought that was in gcc 13 with the cpp version i was using?
+
+omfg its in c++23 but not 2a. god i hate this fucking program 
+holy shit 
+was that the issue with clang as well? 
+honestly switching to clang would be a good idea. they say they are compatable with gcc asm format
+
+and.  as i feared. updating gcc completely breaks it. 
+might be fixable? the console was fucked
+and the game crashes on start.
+god.
+
+want to know why melty was crashing
+ the int* i = NULL;
+        *i = 0; i put in for testing
+
+why.
+
+and now etm from github doesnt have debug info while local does. why.

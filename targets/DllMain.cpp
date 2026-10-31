@@ -18,6 +18,7 @@
 #include "DllRollbackManager.hpp"
 #include "DllTrialManager.hpp"
 #include "ExternalIpAddress.hpp"
+#include "DllChatManager.hpp"
 
 #include <windows.h>
 
@@ -32,7 +33,7 @@ using namespace std;
 #define LOG_FILE                    FOLDER "dll.log"
 
 // The number of milliseconds to poll for events each frame
-#define POLL_TIMEOUT                ( 3 )
+//#define POLL_TIMEOUT                ( 3 ) // moved to DllFrameRate
 
 // The extra number of frames to delay checking round over state during rollback
 #define ROLLBACK_ROUND_OVER_DELAY   ( 5 )
@@ -95,6 +96,10 @@ bool stopping = false;
 
 NetplayManager* netManPtr = 0;
 
+DllChatManager* chatManPtr = 0;
+
+Version remoteVersion;
+
 struct DllMain
         : public Main
         , public RefChangeMonitor<Variable, uint32_t>::Owner
@@ -111,6 +116,9 @@ struct DllMain
 
     // DllTrialManager instance
     DllTrialManager trialMan;
+
+	// DllChatManager instance
+	DllChatManager chatMan;
 
     // If remote has loaded up to character select
     bool remoteCharaSelectLoaded = false;
@@ -189,7 +197,7 @@ struct DllMain
     string replayCheckRngHexStr;
 #endif // NOT RELEASE
 
-    void frameStepNormal()
+    void __attribute__ ((noinline)) frameStepNormal()
     {
         switch ( netMan.getState().value )
         {
@@ -211,6 +219,7 @@ struct DllMain
                         --roundOverTimer;
                 }
 
+				// hey future, please note the fallthrough here!
             case NetplayState::CharaSelect:
             case NetplayState::Loading:
             case NetplayState::CharaIntro:
@@ -269,7 +278,7 @@ struct DllMain
                         break;
                 }
 
-                if ( DllOverlayUi::isEnabled() )                                            // Overlay UI controls
+                if ( DllOverlayUi::isEnabled())// || DllChatManager::isTyping )                                            // Overlay UI controls
                 {
                     localInputs[0] = localInputs[1] = 0;
                 }
@@ -533,14 +542,16 @@ struct DllMain
                 break;
         }
 
+		// the majority of caster work per frame occurs here (timewise). its 3ms, but optimizations could be helpful
+
         // Clear the last changed frame before we get new inputs
         if ( rollbackTimer == minRollbackSpacing )
             netMan.clearLastChangedFrame();
 
-        for ( ;; )
+       for ( ;; )
         {
             // Poll until we are ready to run
-            if ( ! EventManager::get().poll ( POLL_TIMEOUT ) )
+            if ( ! EventManager::get().poll ( DllFrameRate::POLL_TIMEOUT ) ) // this one poll will take that many ms. this... could this be decreased, or adjusted dynamically?
             {
                 appState = AppState::Stopping;
                 return;
@@ -916,6 +927,13 @@ struct DllMain
             return;
         }
 #endif // NOT DISABLE_LOGGING
+
+
+        // i think this would be an ok place to put the chat sending code. i dont think rollbacks occur here.
+		// thank you past maddy, very cool
+
+		chatMan.frameStep(dataSocket);
+
     }
 
     void frameStepRerun()
@@ -954,7 +972,7 @@ struct DllMain
         }
     }
 
-    void frameStep()
+    void __attribute__ ((noinline)) frameStep()
     {
         // New frame
         netMan.updateFrame();
@@ -996,7 +1014,7 @@ struct DllMain
 #endif
     }
 
-    void netplayStateChanged ( NetplayState state )
+    void __attribute__ ((noinline)) netplayStateChanged ( NetplayState state )
     {
         // Catch invalid transitions
         if ( ! netMan.isValidNext ( state ) )
@@ -1109,7 +1127,7 @@ struct DllMain
             dataSocket->send ( new TransitionIndex ( netMan.getIndex() ) );
     }
 
-    void gameModeChanged ( uint32_t previous, uint32_t current )
+    void __attribute__ ((noinline)) gameModeChanged ( uint32_t previous, uint32_t current )
     {
         if ( current == 0
                 || current == CC_GAME_MODE_STARTUP
@@ -1174,7 +1192,7 @@ struct DllMain
         THROW_EXCEPTION ( "gameModeChanged(%u, %u)", ERROR_INVALID_GAME_MODE, previous, current );
     }
 
-    void gameStateChanged ( uint32_t previous, uint32_t current )
+    void __attribute__ ((noinline)) gameStateChanged ( uint32_t previous, uint32_t current )
     {
         if ( current == CC_GAME_STATE_INTRO_DONE )
         {
@@ -1245,8 +1263,9 @@ struct DllMain
     }
 
     // ChangeMonitor callback
-    void changedValue ( Variable var, uint32_t previous, uint32_t current ) override
+    void __attribute__ ((noinline)) changedValue ( Variable var, uint32_t previous, uint32_t current ) override
     {
+		
         switch ( var.value )
         {
             case Variable::WorldTime:
@@ -1429,6 +1448,10 @@ struct DllMain
                 netMan.setRngState ( msg->getAs<RngState>() );
                 return;
 
+            case MsgType::ChatMessage:
+                chatMan.recvMessage(msg->getAs<ChatMessage>());
+                return;
+
 #ifndef RELEASE
             case MsgType::SyncHash:
                 remoteSync.push_back ( msg );
@@ -1561,6 +1584,13 @@ struct DllMain
 
         switch ( msg->getMsgType() )
         {
+			case MsgType::Version:
+				remoteVersion = msg->getAs<Version>();
+				//log("got version info. ugh");
+				//log("local:  %s", LocalVersion.code.c_str());
+				//log("remote: %s", remoteVersion.code.c_str());
+
+				break;
             case MsgType::OptionsMessage:
                 options = msg->getAs<OptionsMessage>();
 
@@ -1579,6 +1609,26 @@ struct DllMain
 
                 } else {
                     DllFrameRate::enable();
+                }
+
+                // Enable/Disable stage animations
+                if ( options[Options::StageAnimations] ) // is this.. the right place to be writing this?
+                {
+                    *CC_STAGE_ANIMATION_OFF_ADDR = 1;
+                } else {
+                    *CC_STAGE_ANIMATION_OFF_ADDR = 0;
+                }
+
+				if ( options[Options::WinCountHUD] )
+                {
+                    *CC_DISABLE_WINCOUNT_HUD = 1;
+                } else {
+                    *CC_DISABLE_WINCOUNT_HUD = 0;
+                }
+
+				if ( options[Options::DisableChat] )
+                {
+                    chatMan.disable = true;
                 }
 
                 // This will log in the previous appDir folder it not the same
@@ -1899,11 +1949,6 @@ struct DllMain
                     // Manually control intro state
                     WRITE_ASM_HACK ( AsmHacks::hijackIntroState );
 
-                    // Disable stage animations
-                    if ( options[Options::StageAnimations] )
-                    {
-                        *CC_STAGE_ANIMATION_OFF_ADDR = 1;
-                    }
                 }
 
                 if ( netMan.autoReplaySave )
@@ -2000,7 +2045,10 @@ struct DllMain
             return;
 
         // Check if the world timer changed, this calls changedValue if changed, which calls frameStep
+
+		ASMNOP;
         worldTimerMoniter.check();
+		ASMNOP;
     }
 
     // Constructor
@@ -2021,6 +2069,7 @@ struct DllMain
         ChangeMonitor::get().addRef ( this, Variable ( Variable::RoundStart ), AsmHacks::roundStartCounter );
         ChangeMonitor::get().addRef ( this, Variable ( Variable::GameState ), *CC_GAME_STATE_ADDR );
         netManPtr = &netMan;
+		chatManPtr = &chatMan;
 
 #ifndef RELEASE
         ChangeMonitor::get().addRef ( this, Variable ( Variable::MenuConfirmState ), AsmHacks::menuConfirmState );

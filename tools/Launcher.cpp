@@ -2,10 +2,10 @@
 #include <windows.h>
 
 #include <string>
-#include <tr1/unordered_set>
-
+//#include <tr1/unordered_set>
+#include <unordered_set>
 using namespace std;
-using namespace std::tr1;
+//using namespace std::tr1;
 
 
 static bool popup_errors = true;

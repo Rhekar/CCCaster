@@ -86,7 +86,7 @@ inline std::string format ( const std::string& fmt, const T& val, V ... vals )
     if ( rest.empty() )
         return buffer;
 
-    return buffer + format ( rest, vals... );
+    return buffer + format( rest, vals... );
 }
 
 

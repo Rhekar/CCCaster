@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <mmsystem.h>
 
+#include "NetLogger.hpp"
+
 using namespace std;
 
 
@@ -24,7 +26,7 @@ static LRESULT CALLBACK keyboardCallback ( int code, WPARAM wParam, LPARAM lPara
             case WM_SYSKEYUP:
             {
                 const KeyboardManager& km = KeyboardManager::get();
-
+				
                 // Ignore key if socket is unconnected
                 if ( !sendSocket || !sendSocket->isConnected() )
                     break;
@@ -161,7 +163,7 @@ void KeyboardManager::socketRead ( Socket *socket, const MsgPtr& msg, const IpAd
     const bool isDown = msg->getAs<KeyboardEvent>().isDown;
 
     LOG ( "vkCode=0x%02X; scanCode=%u; isExtended=%u; isDown=%u", vkCode, scanCode, isExtended, isDown );
-
+	
     if ( owner )
         owner->keyboardEvent ( vkCode, scanCode, isExtended, isDown );
 }

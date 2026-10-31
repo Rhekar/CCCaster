@@ -68,6 +68,7 @@ public:
 
     const NetplayConfig& getNetplayConfig() const { return _netplayConfig; }
 
+    void trackTimePlayed(bool isStart); // tracks when the game is booted/closed to record time played
 
     static void *getConsoleWindow();
 

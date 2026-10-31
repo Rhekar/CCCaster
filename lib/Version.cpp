@@ -1,4 +1,5 @@
 #include "Version.hpp"
+#include "NetLogger.hpp"
 
 #include <vector>
 
@@ -48,6 +49,7 @@ bool Version::isCustom() const
 
 bool Version::isSimilar ( const Version& other, uint8_t level ) const
 {
+    
     switch ( level )
     {
         default:
@@ -65,7 +67,6 @@ bool Version::isSimilar ( const Version& other, uint8_t level ) const
         case 2:
             if ( suffix() != other.suffix() )
                 return false;
-
         case 1:
             if ( level == 1 )
             {
@@ -81,7 +82,6 @@ bool Version::isSimilar ( const Version& other, uint8_t level ) const
 
             if ( minor() != other.minor() )
                 return false;
-
         case 0:
             if ( major() != other.major() )
                 return false;

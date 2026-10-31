@@ -1,10 +1,19 @@
 #!/bin/sh
 
+
+GREEN='\033[1;32m'
+CYAN='\033[1;36m'
+RESET='\033[0m'
+
+printf "${GREEN}inside make_depend${RESET}\n"
+
 files="netplay/*.cpp netplay/*.hpp tools/*.cpp targets/*.cpp targets/*.hpp lib/*.cpp lib/*.hpp tests/*.cpp tests/*.hpp sequences/*.hpp"
 
 branch=`git rev-parse --abbrev-ref HEAD`
 
 # echo Checking dependencies...
+
+printf "params are ${CYAN}'$1'${RESET} and ${CYAN}'$2'${RESET}\n"
 
 tail -n +1 -- `ls -1 $files | sort | paste -sd " " -` | grep "^#include \"\|^==>" > tmp_include
 diff > /dev/null 2>&1 tmp_include .include_$branch
@@ -12,6 +21,7 @@ diff > /dev/null 2>&1 tmp_include .include_$branch
 if [ $? -ne 0 ]; then
 
     # echo Dependencies changed!
+	printf "${CYAN}Dependencies changed! ${RESET}\n"
 
     mv -f tmp_include .include_$branch
 
@@ -23,7 +33,16 @@ if [ $? -ne 0 ]; then
     $1 $2 -std=c++11 -MM targets/*.cpp   targets/*.hpp   > tmp_depend3 & \
     $1 $2 -std=c++11 -MM lib/*.cpp       lib/*.hpp       > tmp_depend4 & \
     $1 $2 -std=c++11 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5
-
+	
+	
+   	#$1 $2 -MM sequences/*.cpp sequences/*.hpp > tmp_depend0 & \
+   	#$1 $2 -MM netplay/*.cpp   netplay/*.hpp   > tmp_depend1 & \
+   	#$1 $2 -MM tools/*.cpp                     > tmp_depend2 & \
+   	#$1 $2 -MM targets/*.cpp   targets/*.hpp   > tmp_depend3 & \
+   	#$1 $2 -MM lib/*.cpp       lib/*.hpp       > tmp_depend4 & \
+   	#$1 $2 -MM tests/*.cpp     tests/*.hpp     > tmp_depend5
+	
+	printf "${CYAN}waiting ${RESET}\n"
     wait
 
     cp /dev/null .depend_$branch
@@ -39,6 +58,7 @@ if [ $? -ne 0 ]; then
 
     rm -f tmp_depend*
 
+	printf "${GREEN}done make_depend${RESET}\n"
     exit 0
 
 fi
@@ -47,4 +67,7 @@ fi
 
 rm -f tmp_include
 touch .depend_$branch
+
+printf "${GREEN}done make_depend${RESET}\n"
+
 exit 0

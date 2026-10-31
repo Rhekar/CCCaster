@@ -70,6 +70,8 @@
 
 #define INT3 __asmStart R"( int3; )" __asmEnd
 
+#define ASMNOP __asmStart R"( NOP; )" __asmEnd
+
 #define ASMRET __asmStart R"( ret; )" __asmEnd
 
 #define WRITE_ASM_HACK(ASM_HACK)                                                                                    \
@@ -93,9 +95,13 @@
 
 #define INLINE_FF_12_BYTES { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
 
+#define INLINE_NOP { 0x90 }
+
 #define INLINE_NOP_TWO_TIMES { 0x90, 0x90 }
 
 #define INLINE_NOP_THREE_TIMES { 0x90, 0x90, 0x90 }
+
+#define INLINE_NOP_FOUR_TIMES { 0x90, 0x90, 0x90, 0x90 }
 
 #define INLINE_NOP_FIVE_TIMES { 0x90, 0x90, 0x90, 0x90, 0x90 }
 
@@ -111,7 +117,41 @@
 
 #define PATCHCALL(patchAddr, newAddr) PATCHCALL_HELPER(((unsigned)patchAddr), ((unsigned)newAddr))
 
-#define DISABLECALL(patchAddr) { ( void *) (patchAddr), INLINE_NOP_FIVE_TIMES }
+#define DISABLECALL5(patchAddr) { ( void *) (patchAddr), INLINE_NOP_FIVE_TIMES } 
+#define DISABLECALL6(patchAddr) { ( void *) (patchAddr), INLINE_NOP_SIX_TIMES } 
+
+void __stdcall patchMemcpy(auto dst, auto src, size_t n)
+{
+
+	static_assert(sizeof(dst) == 4, "Type must be 4 bytes");
+	static_assert(sizeof(src) == 4, "Type must be 4 bytes");
+
+	LPVOID dest = reinterpret_cast<LPVOID>(dst);
+	LPVOID source = reinterpret_cast<LPVOID>(src);
+
+	DWORD oldProtect;
+	VirtualProtect(dest, n, PAGE_EXECUTE_READWRITE, &oldProtect);
+	memcpy(dest, source, n);
+	VirtualProtect(dest, n, oldProtect, NULL);
+}
+
+void __stdcall patchByte(auto addr, const BYTE byte)
+{
+	static_assert(sizeof(addr) == 4, "Type must be 4 bytes");
+
+	BYTE temp[] = { byte };
+
+	patchMemcpy(addr, temp, 1);
+}
+
+void __stdcall patchDWORD(auto addr, const DWORD dword)
+{
+	static_assert(sizeof(addr) == 4, "Type must be 4 bytes");
+
+	DWORD temp[] = { dword };
+
+	patchMemcpy(addr, temp, 4);
+}
 
 namespace AsmHacks
 {
@@ -235,7 +275,14 @@ __attribute__((naked, noinline)) void _naked_presentFuncCaller();
 static const AsmList hookPresentCaller = { // rets taken from func 0x004bdbc0
 	PATCHJUMP(0x004bdd4a, _naked_presentFuncCaller),
 	PATCHJUMP(0x004bdd6c, _naked_presentFuncCaller),
-	PATCHJUMP(0x004bdd9d, _naked_presentFuncCaller)
+	PATCHJUMP(0x004bdd9d, _naked_presentFuncCaller),
+
+    // this shit is stupid, murder meltys internal frame counter
+    // lets the game get the frame out earlier ig
+    // but tbh with my delay being after the frame idk how often this is called
+    // i could potentially ... add a delay BEFORE the frame if the frame
+    // to keep the frame out longer and wait for packets, if the packet recv is done in another thread? it must be right?
+    PATCHJUMP(0x004bdc66, 0x004bdd03),
 };
 
 // Disable normal joystick and keyboard controls
@@ -353,7 +400,7 @@ static const AsmList saveReplay =
         0xE9, 0x10, 0x07, 0x00, 0x00,                               // jmp 0x48283e
     } },
     { ( void * ) 0x4830A4, {
-        0xE8, INLINE_DWORD ( ( ( char * ) &saveReplayCb ) - 0x4830A4 - 5 ),   // call callback
+        0xE8, INLINE_DWORD ( ( (uintptr_t)(&saveReplayCb) ) - 0x4830A4 - 5 ),   // call callback
         0x90, //0x90, 0x90, 0x90, 0x90, 0x90,
         0xE9, 0xF2, 0xFE, 0xFF, 0xFF,                               // jmp 0x482FA1
     } },
@@ -517,7 +564,7 @@ extern "C" void charaSelectColorCb();
 // The color values can be effectively overridden here. This is only effective during character select.
 static const Asm hijackCharaSelectColors =
     { ( void * ) 0x489CD1, {
-        0xE8, INLINE_DWORD ( ( ( char * ) &charaSelectColorCb ) - 0x489CD1 - 5 ),       // call charaSelectColorCb
+        0xE8, INLINE_DWORD ( ( ( uintptr_t ) &charaSelectColorCb ) - 0x489CD1 - 5 ),       // call charaSelectColorCb
         0x90, 0x90, 0x90,                                                               // nops
     } };
 
@@ -530,7 +577,7 @@ static const AsmList hijackLoadingStateColors =
 {
     { ( void * ) 0x448202, {
         0x50,                                                                           // push eax
-        0xE8, INLINE_DWORD ( ( ( char * ) &loadingStateColorCb ) - 0x448202 - 1 - 5 ),  // call loadingStateColorCb
+        0xE8, INLINE_DWORD ( ( ( uintptr_t ) &loadingStateColorCb ) - 0x448202 - 1 - 5 ),  // call loadingStateColorCb
         0x58,                                                                           // pop eax
         0x85, 0xC0,                                                                     // test eax,eax
         0xEB, 0x38,                                                                     // jmp 0x448245
@@ -568,7 +615,7 @@ extern "C" void addExtraDrawCallsCb();
 static const AsmList addExtraDraws =
 {
     { ( void * ) 0x432CD2, {
-            0xE8, INLINE_DWORD ( ( ( char * ) &addExtraDrawCallsCb ) - 0x432CD2 - 5 ),       // call charaSelectColorCb
+            0xE8, INLINE_DWORD ( ( ( uintptr_t ) &addExtraDrawCallsCb ) - 0x432CD2 - 5 ),       // call charaSelectColorCb
             0x6A, 0xFF,                                          // Push -1
             0xE9, 0x54, 0x00, 0x00, 0x00                         // jmp 432D32
         } },
@@ -584,7 +631,7 @@ static const AsmList addExtraTextures =
          0x8B, 0x8C, 0x24, 0x1C, 0x01, 0x00, 0x00
          } },*/
     { ( void * ) 0x41BE38, {
-         0xE8, INLINE_DWORD ( ( ( char * ) &addExtraTexturesCb ) - 0x41BE38 - 5 ),       // call addExtraTexturesCb
+         0xE8, INLINE_DWORD ( ( ( uintptr_t ) &addExtraTexturesCb ) - 0x41BE38 - 5 ),       // call addExtraTexturesCb
          0xC3
     } },
 };
@@ -599,6 +646,30 @@ extern std::map<int, std::map<int, std::array<DWORD, 256>>> palettes;
 
 static const AsmList loadCustomPalettesAsm = {
     PATCHJUMP(0x0041f87a, _naked_paletteCallback),
+};
+
+static const AsmList optimizeGameAsm = {
+    PATCHJUMP(0x004bdc66, 0x004bdd03), // as for if this saves time, it seems to. hopefully i dont skip over any 2v2 hooks.
+    
+   	{ (void*) 0x0040f4d0, INLINE_NOP_FOUR_TIMES },
+
+	DISABLECALL5(0x0040f3b1),
+
+	//{ (void*) 0x0041fdff, INLINE_NOP_TWO_TIMES},
+	//{ (void*) 0x0041fe03, INLINE_NOP_TWO_TIMES},
+	//DISABLECALL6(0x0041fe05), // this sleep is huge. needs to be postload tho?
+
+	// due to the insane way i did early ETM hooks, i cannot patch out the pushes and the sleep here, and instead need to patch in a add esp 4. dont ask. i feel insane
+	{ (void*) 0x0041fe05, {0x83, 0xC4, 0x04, 0x90, 0x90, 0x90}},
+
+	PATCHJUMP(0x004bdbd4, 0x004bdd03),
+	DISABLECALL6(0x004bdd74),
+  
+	//{ (void*) 0x004c4d90, INLINE_NOP_TWO_TIMES}, // im unsure if this is ever called, and if it should be disabled.
+	//DISABLECALL6(0x004c4d92),
+
+	{ (void*) 0x0040f1c0, INLINE_NOP_TWO_TIMES }, // fix a crash when launching without a sound device
+
 };
 
 } // namespace AsmHacks

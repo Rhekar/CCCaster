@@ -101,6 +101,8 @@ public:
     static ControllerManager& get();
 
     friend class DllControllerManager;
+	
+	friend class DllChatManager;
 
 private:
 

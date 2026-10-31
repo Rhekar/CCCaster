@@ -5,6 +5,7 @@
 #include "DllTrialManager.hpp"
 #include "KeyboardState.hpp"
 #include "CharacterSelect.hpp"
+#include "DllFrameRate.hpp"
 
 #include <windows.h>
 
@@ -46,6 +47,7 @@ bool DllControllerManager::isNotMapping() const
 
 void DllControllerManager::updateControls ( uint16_t *localInputs )
 {
+
     if ( stopping )
         return;
 
@@ -69,7 +71,7 @@ void DllControllerManager::updateControls ( uint16_t *localInputs )
     {
         toggleTrialMenu = true;
     }
-    if ( KeyboardState::isPressed ( VK_TOGGLE_OVERLAY ) )
+    if ( KeyboardState::isPressed ( VK_TOGGLE_OVERLAY ) && !chatManPtr->isTyping)
     {
         toggleOverlay = true;
     }
@@ -77,6 +79,36 @@ void DllControllerManager::updateControls ( uint16_t *localInputs )
     {
         framestepEnabled = true;
     }
+
+	if(KeyboardState::isDown(VK_LCONTROL) && KeyboardState::isPressed(VK_LSHIFT) && KeyboardState::isDown(VK_NUMPAD0)) {
+		log("`ctrl + shift + numpad0 pressed, crashing intentionally");
+
+		int* _temp = NULL;
+		*_temp = 0;
+	}
+
+	if(KeyboardState::isDown(VK_MENU) && KeyboardState::isPressed(VK_LSHIFT) && KeyboardState::isDown(VK_NUMPAD1)) {
+		log("`toggling fps limit");
+
+		if(DllFrameRate::desiredFps > 100) {
+			setDesiredFPS(60.0);
+		} else {
+			setDesiredFPS(17474.0);
+		}
+	}
+	
+	if ( !chatManPtr->isTyping 
+		&& KeyboardState::isPressed ( VK_ENBABLE_CHAT ) 
+		&& (!DllOverlayUi::isEnabled() && !DllOverlayUi::isToggling())
+	)
+    {
+		// its funny, ive become so indecisive over the last year. i know what to do, but thinking removes my ability to do it
+        chatManPtr->startTyping();
+    }
+
+	if(chatManPtr->isTyping) {
+		chatManPtr->typeMessage();
+	}
 
     for ( Controller *controller : _allControllers )
     {
@@ -202,6 +234,7 @@ void DllControllerManager::updateControls ( uint16_t *localInputs )
             AsmHacks::enableEscapeToExit = true;
 
             // Disable overlay
+			//DllOverlayUi::setNoneMode();
             DllOverlayUi::disable();
         }
     }
@@ -245,6 +278,8 @@ void DllControllerManager::updateControls ( uint16_t *localInputs )
     {
         handleMappingOverlay();
     }
+
+	
 }
 
 void DllControllerManager::disableTrialMenuOverlay()

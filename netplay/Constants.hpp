@@ -55,9 +55,11 @@
 #define CC_STAGE_ANIMATION_OFF_ADDR ( ( uint32_t * ) 0x554124 ) // 1 if stage animations are off
 #define CC_INTRO_STATE_ADDR         ( ( uint8_t * )  0x55D20B ) // 2 (character intros), 1 (pre-game), 0 (in-game)
 #define CC_HIT_SPARKS_ADDR          ( ( uint32_t * ) 0x67BD78 ) // Number of hit sparks?
+#define CC_DISABLE_WINCOUNT_HUD		( ( uint32_t * ) 0x564154 ) // disables the "challenger" and "wincount" things on top of the hud. was annoying some ppl
 
 #define CC_STAGE_SELECTOR_ADDR      ( ( uint32_t * ) 0x74FD98 ) // Currently selected stage, can be assigned to directly
 #define CC_FPS_COUNTER_ADDR         ( ( uint32_t * ) 0x774A70 ) // Value of the displayed FPS counter
+#define CC_FPS_COUNTER_COLOR        ( ( uint32_t * ) (0x00432de9 + 1)) // Color of the counter. in code space, not ram
 #define CC_PERF_FREQ_ADDR           ( ( uint64_t * ) 0x774A80 ) // Value of QueryPerformanceFrequency for game FPS
 #define CC_SKIPPABLE_FLAG_ADDR      ( ( uint32_t * ) 0x74D99C ) // Flag that indicates a skippable state when in-game
 #define CC_ALIVE_FLAG_ADDR          ( ( uint8_t * )  0x76E650 ) // Flag that indicates the game is alive
@@ -76,7 +78,7 @@
 #define CC_DUMMY_STATUS_DUMMY       ( 5 )
 #define CC_DUMMY_STATUS_RECORD      ( -1 )
 
-#define CC_PTR_TO_WRITE_INPUT_ADDR  ( ( char * )     0x76E6AC ) // Pointer to the location to write game input
+#define CC_PTR_TO_WRITE_INPUT_ADDR  ( ( DWORD )     0x76E6AC ) // Pointer to the location to write game input
 #define CC_P1_OFFSET_DIRECTION      ( 0x18 )                    // Offset to write P1 direction input
 #define CC_P1_OFFSET_BUTTONS        ( 0x24 )                    // Offset to write P1 buttons input
 #define CC_P2_OFFSET_DIRECTION      ( 0x2C )                    // Offset to write P2 direction input
@@ -226,7 +228,7 @@
 #define MM_HOOK_CALL2_ADDR          ( ( char * )     0x40D411 )
 
 // Allows for multiple instances of melty
-#define MULTIPLE_MELTY              ( ( char * )     0x40D25A )
+#define MULTIPLE_MELTY              ( ( DWORD )     0x40D25A )
 
 // Addresses for sprite textures
 #define BUTTON_SPRITE_TEX           ( 0x74d5e8 )
@@ -241,6 +243,10 @@
 // Display Flags
 #define CC_SHOW_ATTACK_DISPLAY      ( ( int * )      0x5595B8 )
 #define CC_SHOW_INPUT_DISPLAY       ( ( int * )      0x5585F8 )
+
+#define INITIAL_SCREEN_WIDTH  ( ( int * ) 0x0054d048)
+#define INITIAL_SCREEN_HEIGHT ( ( int * ) 0x0054d04c)
+
 
 union IndexedFrame
 {

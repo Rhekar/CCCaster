@@ -17,55 +17,6 @@
 #include <winsock2.h>
 #include <wininet.h>
 
-
-void ___log(const char* msg)
-{
-	const char* ipAddress = "127.0.0.1";
-	unsigned short port = 17474;
-	int msgLen = strlen(msg);
-	const char* message = msg;
-	WSADATA wsaData;
-	int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (result != 0) 
-	{
-		return;
-	}
-	SOCKET sendSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sendSocket == INVALID_SOCKET) 
-	{
-		WSACleanup();
-		return;
-	}
-	sockaddr_in destAddr;
-	destAddr.sin_family = AF_INET;
-	destAddr.sin_port = htons(port);
-	if (inet_pton(AF_INET, ipAddress, &destAddr.sin_addr) <= 0) 
-	{
-		closesocket(sendSocket);
-		WSACleanup();
-		return;
-	}
-	int sendResult = sendto(sendSocket, message, strlen(message), 0, (sockaddr*)&destAddr, sizeof(destAddr));
-	if (sendResult == SOCKET_ERROR) 
-	{
-		closesocket(sendSocket);
-		WSACleanup();
-		return;
-	}
-	closesocket(sendSocket);
-	WSACleanup();
-}
-
-void log(const char* format, ...) {
-	static char buffer[1024]; // no more random char buffers everywhere.
-	va_list args;
-	va_start(args, format);
-	vsnprintf(buffer, 1024, format, args);
-	___log(buffer);
-	va_end(args);
-}
-
-
 using namespace std;
 
 #define PING_INTERVAL ( 1000/60 )
@@ -178,6 +129,8 @@ struct MainApp
     bool kbCancel = false;
 
     bool connected = true;
+
+	Version remoteVersion = LocalVersion;
 
     /* Connect protocol
 
@@ -366,31 +319,31 @@ struct MainApp
 
     void gotVersionConfig ( Socket *socket, const VersionConfig& versionConfig )
     {
-        const Version RemoteVersion = versionConfig.version;
+        remoteVersion = versionConfig.version;
 
         LOG ( "LocalVersion='%s'; revision='%s'; buildTime='%s'",
               LocalVersion, LocalVersion.revision, LocalVersion.buildTime );
 
         LOG ( "RemoteVersion='%s'; revision='%s'; buildTime='%s'",
-              RemoteVersion, RemoteVersion.revision, RemoteVersion.buildTime );
+              remoteVersion, remoteVersion.revision, remoteVersion.buildTime );
 
         LOG ( "VersionConfig: mode=%s; flags={ %s }", versionConfig.mode, versionConfig.mode.flagString() );
 
-        if ( ! LocalVersion.isSimilar ( RemoteVersion, 1 + options[Options::StrictVersion] ) )
+        if ( ! LocalVersion.isSimilar ( remoteVersion, 1 + options[Options::StrictVersion] ) )
         {
             string local = LocalVersion.code;
-            string remote = RemoteVersion.code;
+            string remote = remoteVersion.code;
 
             if ( options[Options::StrictVersion] >= 2 )
             {
                 local += " " + LocalVersion.revision;
-                remote += " " + RemoteVersion.revision;
+                remote += " " + remoteVersion.revision;
             }
 
             if ( options[Options::StrictVersion] >= 3 )
             {
                 local += " " + LocalVersion.buildTime;
-                remote += " " + RemoteVersion.buildTime;
+                remote += " " + remoteVersion.buildTime;
             }
 
             if ( clientMode.isHost() )
@@ -926,6 +879,7 @@ struct MainApp
             return;
         }
 
+		log("```HELLO FROM CASTER, STARTING MODE '%s'", getGameModeString());
         ui.display ( format ( "Starting %s mode...", getGameModeString() ),
                      clientMode.isNetplay() ); // Only replace last message if netplaying
 
@@ -1186,6 +1140,8 @@ struct MainApp
             forwardMsgQueue();
             return;
         }
+		
+		procMan.ipcSend( remoteVersion );
 
         ASSERT ( netplayConfig.delay != 0xFF );
 
@@ -1194,6 +1150,8 @@ struct MainApp
         procMan.ipcSend ( netplayConfig );
 
         ui.display ( format ( "Started %s mode", getGameModeString() ) );
+
+        ui.trackTimePlayed(true);
     }
 
     void ipcDisconnected() override
@@ -1201,6 +1159,8 @@ struct MainApp
         if ( lastError.empty() )
             lastError = "Game closed!";
         stop();
+
+        ui.trackTimePlayed(false);
     }
 
     void ipcRead ( const MsgPtr& msg ) override
@@ -1349,7 +1309,15 @@ struct MainApp
         }
         if ( ui.getConfig().getInteger ( "stageAnimations" ) > 0 )
         {
-            options.set ( Options::FrameLimiter, 1 );
+            options.set ( Options::StageAnimations, 1 );
+        }
+		if ( ui.getConfig().getInteger ( "winCountHUD" ) > 0 )
+        {
+            options.set ( Options::WinCountHUD, 1 );
+        }
+		if ( ui.getConfig().getInteger ( "disableChat" ) > 0 )
+        {
+            options.set ( Options::DisableChat, 1 );
         }
         if ( ! ProcessManager::getIsWindowed() )
         {

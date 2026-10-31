@@ -7,6 +7,7 @@
 #include "MouseManager.hpp"
 #include "ControllerManager.hpp"
 #include "DllFrameRate.hpp"
+#include "DllExceptionHandler.hpp"
 
 #include "D3DHook.h"
 
@@ -54,6 +55,9 @@ void initializePreLoad()
 
     for ( const Asm& hack : loadCustomPalettesAsm )
         WRITE_ASM_HACK ( hack );
+		
+	for ( const Asm& hack : optimizeGameAsm ) 
+        WRITE_ASM_HACK ( hack );
 
     WRITE_ASM_HACK ( multiWindow );
     WRITE_ASM_HACK ( detectAutoReplaySave );
@@ -61,7 +65,7 @@ void initializePreLoad()
     WRITE_ASM_HACK ( disableTrainingMusicReset );
     WRITE_ASM_HACK ( fixBossStageSuperFlashOverlay );
     WRITE_ASM_HACK ( disableScreenshot );
-
+    
     // TODO color hijack is temporary disabled due to some issues
     //
     // for ( const Asm& hack : hijackLoadingStateColors )
@@ -73,11 +77,13 @@ void initializePreLoad()
 // Note: this is called on the SAME thread as the main application thread
 MH_WINAPI_HOOK ( LRESULT, CALLBACK, WindowProc, HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
+    ExceptionHandler::init(); // this needs to be called here sice this is ran in main thread, dll thread aint it, this IS NOT A GOOD PLACE TO PUT THIS?
+
     switch ( msg )
     {
         case WM_SYSCOMMAND:
             // Eat these two events to prevent screensaver and sleep
-            switch ( wParam )
+            switch ( wParam )	
             {
                 case SC_SCREENSAVE:
                 case SC_MONITORPOWER:
@@ -89,10 +95,20 @@ MH_WINAPI_HOOK ( LRESULT, CALLBACK, WindowProc, HWND hwnd, UINT msg, WPARAM wPar
             break;
 
         case WM_KEYDOWN:
+		{
             // Ignore repeated keys
             if ( ( lParam >> 30 ) & 1 )
                 break;
-
+			
+			if ( KeyboardManager::get().isHooked() && KeyboardManager::get().owner ) { // this might have bad sideffects
+				const uint32_t vkCode = wParam;
+            	const uint32_t scanCode = ( lParam >> 16 ) & 127;
+            	const bool isExtended = ( lParam >> 24 ) & 1;
+            	//const bool isDown = ( lParam >> 31 ) & 1;
+				const bool isDown = false;
+				KeyboardManager::get().owner->keyboardEvent ( vkCode, scanCode, isExtended, isDown );
+			}
+		}
         // Intentional fall-through
 
         case WM_SYSKEYDOWN:

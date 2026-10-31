@@ -85,15 +85,15 @@ bool EventManager::poll ( uint64_t timeout )
 
     timeBeginPeriod ( 1 ); // for select, see comment in SocketManager
 
-    while ( now < end )
-    {
+    //while ( now < end )
+    do { // do while instead of while allows this to work even when poll is 0
         checkEvents ( end - now );
 
         if ( ! _running )
             break;
 
         now = TimerManager::get().getNow ( true );
-    }
+    } while ( now < end );
 
     timeEndPeriod ( 1 ); // for select, see comment in SocketManager
 

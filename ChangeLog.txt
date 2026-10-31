@@ -1,3 +1,21 @@
+v3.1.009 (BLEEDING)
+- Controller bind text size now scales with screen resolution
+- Change bgm and sfx volume in caster
+- More changes to the FPS display, turns grey on a lag frame
+- Track and view your playtime
+- Reduce frame limiter CPU usage
+- Improved frame limiter on linux (By Alx)
+- Add option to disable the win count hud
+- In game chat.
+- Report crashes
+- Remove a stupid sleep in the original code.
+- Fix a crash when launching without a sound device
+- Improve caster performance
+
+v3.1.008
+- Display fps value as a rolling average, no more flickering
+- Change the location of the frame limiter hook
+
 v3.1.007
 - Changed the frame limiter to prevent fastmelty, run game at 60 (by Inana)
 - Added toggle for stage animations

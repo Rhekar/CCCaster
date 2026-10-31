@@ -4,6 +4,7 @@
 
 #include <unordered_map>
 
+#include <string>
 
 #define DEFAULT_HELD_DURATION ( 300 )
 
@@ -19,6 +20,8 @@ public:
     static void clear();
 
     static void update();
+
+	static std::string getRecentPresses(uint64_t lastCheckTime);
 
     static bool isDown ( uint32_t vkCode );
 

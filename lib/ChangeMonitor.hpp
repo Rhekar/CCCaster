@@ -3,7 +3,6 @@
 #include <vector>
 #include <memory>
 
-
 class ChangeMonitor
 {
 public:
@@ -38,7 +37,7 @@ public:
     }
 
     // Check all monitors for changes
-    void check()
+    void __attribute__ ((noinline)) check()
     {
         // Iterate using indices, because the list can change
         for ( size_t i = 0; i < _monitors.size(); ++i )
@@ -87,7 +86,7 @@ public:
         , _current ( ref )
         , _previous ( ref ) {}
 
-    bool check() override
+    bool __attribute__ ((noinline)) check() override
     {
         if ( _current == _previous )
             return false;

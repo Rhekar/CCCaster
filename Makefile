@@ -1,5 +1,6 @@
 VERSION = 3.1
-SUFFIX = .007
+SUBSUFFIX = -BLEEDING
+SUFFIX = .008$(SUBSUFFIX)
 NAME = cccaster
 TAG =
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
@@ -52,10 +53,16 @@ LIB_OBJECTS = $(LIB_CPP_SRCS:.cpp=.o) $(CONTRIB_C_SRCS:.c=.o)
 MAIN_OBJECTS = $(MAIN_CPP_SRCS:.cpp=.o) $(CONTRIB_CC_SRCS:.cc=.o) $(CONTRIB_CPP_SRCS:.cpp=.o) $(CONTRIB_C_SRCS:.c=.o)
 DLL_OBJECTS = $(DLL_CPP_SRCS:.cpp=.o) $(HOOK_CC_SRCS:.cc=.o) $(HOOK_C_SRCS:.c=.o) $(CONTRIB_C_SRCS:.c=.o) $(CONTRIB_CPP_SRCS:.cpp=.o)
 
-# Tool chain
-PREFIX = ../mingw32/bin/i686-w64-mingw32-
+$(info HELLO FROM MAKEFILE)
+
+# Tool chain sudo apt install clang lld
+# sudo apt-get install libc++-dev
+PREFIX = i686-w64-mingw32-
 GCC = $(PREFIX)gcc
-CXX = $(PREFIX)g++
+CXX = $(PREFIX)g++ 
+#PREFIX =
+#GCC = $(PREFIX)clang 	--target=i686-w64-windows-gnu	-stdlib=libc++
+#CXX = $(PREFIX)clang++ 	--target=i686-w64-windows-gnu	-stdlib=libc++ 
 WINDRES = windres
 STRIP = strip
 TOUCH = touch
@@ -72,10 +79,12 @@ ifeq ($(OS),Windows_NT)
 else
 	WINDRES = $(PREFIX)windres
 	STRIP = $(PREFIX)strip
+	#STRIP = touch
 	CHMOD_X = chmod +x $@
 	GRANT =
 	ASTYLE = 3rdparty/astyle
 	TOUCH = $(STRIP)
+	#TOUCH = touch
 	OPENGL_HEADERS = /usr/i686-w64-mingw32/include/GL
 endif
 
@@ -90,13 +99,24 @@ DEFINES += -DLOBBY_LIST='"$(LOBBY_LIST)"'
 INCLUDES = -I$(CURDIR) -I$(CURDIR)/netplay -I$(CURDIR)/lib -I$(CURDIR)/tests -I$(CURDIR)/3rdparty -I$(CURDIR)/sequences
 INCLUDES += -I$(CURDIR)/3rdparty/cereal/include -I$(CURDIR)/3rdparty/gtest/include -I$(CURDIR)/3rdparty/minhook/include
 INCLUDES += -I$(CURDIR)/3rdparty/d3dhook -I$(CURDIR)/3rdparty/framedisplay -I$(CURDIR)/3rdparty/imgui -I$(CURDIR)/3rdparty/imgui/backends
+
+INCLUDES += -I$(CURDIR)/3rdparty/distorm3/include/ -I$(CURDIR)/3rdparty/AntTweakBar/include/ -I$(CURDIR)/3rdparty/glfw
+
+INCLUDES += -I ~/mingw-gcc14/src/mingw-w64/mingw-w64-libraries/winpthreads/include/
+
 CC_FLAGS = -m32 $(INCLUDES) $(DEFINES)
 #	https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
 # 	Intel Celeron 440 is listed as minimum CPU for melty on steam
-CC_FLAGS += -mmmx -msse -msse2 -msse3 -mssse3
+CC_FLAGS +=  -mmmx -msse -msse2 -msse3 -mssse3 
+#CC_FLAGS += -std=c++2a
+CC_FLAGS += -std=c++2a
+#CC_FLAGS += -fconcepts # use if on gcc
+
+CC_FLAGS += -gcodeview 
+#INCLUDES += 
 
 # Linker flags
-LD_FLAGS = -m32 -static -lws2_32 -lpsapi -lwinpthread -lwinmm -lole32 -ldinput -lwininet -ldwmapi -lgdi32
+LD_FLAGS = -m32 -static -lws2_32 -lpsapi -lwinpthread -lwinmm -lole32 -ldinput -lwininet -ldwmapi -lgdi32 -lwinhttp -ldbghelp -Wl,--export-all-symbols
 
 # Build options
 # DEFINES += -DDISABLE_LOGGING
@@ -152,9 +172,10 @@ ifneq (,$(findstring release,$(MAKECMDGOALS)))
 		$(ZIP) $(ARCHIVE) -j scripts/Add_Handler_Protocol.bat
 		$(ZIP) $(ARCHIVE) -j $(RELAY_LIST)
 		$(ZIP) $(ARCHIVE) -j $(LOBBY_LIST)
+		$(ZIP) $(ARCHIVE) -j hook.pdb
 		cp -r res/GRP GRP
 		$(ZIP) $(ARCHIVE) -r GRP
-		$(ZIP) $(ARCHIVE) -r cccaster/trials
+		$(ZIP) $(ARCHIVE) -r cccaster/trials 
 		rm -rf GRP
 	        $(GRANT)
 endif
@@ -162,14 +183,14 @@ endif
 
 $(BINARY): $(addprefix $(BUILD_PREFIX)/,$(MAIN_OBJECTS)) res/icon.res
 	rm -f $(filter-out $(BINARY),$(wildcard $(NAME)*.exe))
-	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS)
+	$(CXX) -o $@ $(CC_FLAGS) -Wall   $^ $(LD_FLAGS)
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
 	@echo
 
 $(FOLDER)/$(DLL): $(addprefix $(BUILD_PREFIX)/,$(DLL_OBJECTS)) res/rollback.o targets/CallDraw.s | $(FOLDER)
-	$(CXX) -o $@ $(CC_FLAGS) -Wall -std=c++2a -fconcepts $^ -shared $(LD_FLAGS) -ld3dx9
+	$(CXX) -o $@ $(CC_FLAGS) -Wall   $^ -shared $(LD_FLAGS) -ld3dx9
 	@echo
 	$(STRIP) $@
 	$(GRANT)
@@ -183,7 +204,7 @@ $(FOLDER)/$(LAUNCHER): tools/Launcher.cpp | $(FOLDER)
 	@echo
 
 $(FOLDER)/$(UPDATER): tools/Updater.cpp lib/StringUtils.cpp | $(FOLDER)
-	$(CXX) -o $@ $^ -m32 -s -Os -O2 -std=c++2a -fconcepts -I$(CURDIR)/lib -Wall -static -lpsapi
+	$(CXX) -o $@ $^ -m32 -s -Os -O2 -std=c++11  -I$(CURDIR)/lib -Wall -static -lpsapi
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
@@ -232,7 +253,7 @@ DEBUGGER_LIB_OBJECTS = \
 	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o,$(LIB_OBJECTS)))
 
 tools/$(DEBUGGER): tools/Debugger.cpp $(DEBUGGER_LIB_OBJECTS)
-	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS) \
+	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall   $^ $(LD_FLAGS) \
 	-I$(CURDIR)/3rdparty/distorm3/include -L$(CURDIR)/3rdparty/distorm3 -ldistorm3
 	@echo
 	$(STRIP) $@
@@ -244,7 +265,7 @@ GENERATOR_LIB_OBJECTS = \
 	$(addprefix $(LOGGING_PREFIX)/,$(filter-out lib/Version.o lib/LoggerLogVersion.o lib/ConsoleUi.o,$(LIB_OBJECTS)))
 
 tools/$(GENERATOR): tools/Generator.cpp $(GENERATOR_LIB_OBJECTS)
-	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -std=c++2a -fconcepts $^ $(LD_FLAGS)
+	$(CXX) -o $@ $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -std=c++2a $^ $(LD_FLAGS)
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
@@ -276,7 +297,7 @@ FRAMEDISPLAY_LD_FLAGS += -mwindows -static -lmingw32 -lpng -lz -lglfw -lopengl32
 	$(MAKE) --directory=3rdparty/AntTweakBar/src
 
 $(PALETTES): $(PALETTES_SRC) $(FRAMEDISPLAY_OBJECTS) res/palettes.res 3rdparty/AntTweakBar/lib/libAntTweakBar.a
-	$(CXX) $(FRAMEDISPLAY_CC_FLAGS) -o $@ $(FRAMEDISPLAY_INCLUDES) -Wall -std=c++2a -fconcepts -C $^ $(FRAMEDISPLAY_LD_FLAGS)
+	$(CXX) $(FRAMEDISPLAY_CC_FLAGS) -o $@ $(FRAMEDISPLAY_INCLUDES) -Wall  -std=c++2a  -C $^ $(FRAMEDISPLAY_LD_FLAGS)
 	@echo
 	$(STRIP) $@
 	$(CHMOD_X)
@@ -456,7 +477,7 @@ build_debug_$(BRANCH):
 	rsync -a -f"- .git/" -f"- build_*/" -f"+ */" -f"- *" --exclude=".*" . $@
 
 build_debug_$(BRANCH)/%.o: %.cpp | build_debug_$(BRANCH)
-	$(CXX) $(CC_FLAGS) $(DEBUG_FLAGS) -Wall -Wempty-body -std=c++2a -fconcepts -o $@ -c $<
+	$(CXX) $(CC_FLAGS) $(DEBUG_FLAGS) -Wall -Wempty-body   -o $@ -c $<
 
 build_debug_$(BRANCH)/%.o: %.cc | build_debug_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(DEBUG_FLAGS) -o $@ -c $<
@@ -469,7 +490,7 @@ build_logging_$(BRANCH):
 	rsync -a -f"- .git/" -f"- build_*/" -f"+ */" -f"- *" --exclude=".*" . $@
 
 build_logging_$(BRANCH)/%.o: %.cpp | build_logging_$(BRANCH)
-	$(CXX) $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -Wempty-body -std=c++2a -fconcepts -o $@ -c $<
+	$(CXX) $(CC_FLAGS) $(LOGGING_FLAGS) -Wall -Wempty-body   -o $@ -c $<
 
 build_logging_$(BRANCH)/%.o: %.cc | build_logging_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(LOGGING_FLAGS) -o $@ -c $<
@@ -482,7 +503,7 @@ build_release_$(BRANCH):
 	rsync -a -f"- .git/" -f"- build_*/" -f"+ */" -f"- *" --exclude=".*" . $@
 
 build_release_$(BRANCH)/%.o: %.cpp | build_release_$(BRANCH)
-	$(CXX) $(CC_FLAGS) $(RELEASE_FLAGS) -std=c++2a -fconcepts -o $@ -c $<
+	$(CXX) $(CC_FLAGS) $(RELEASE_FLAGS)   -o $@ -c $<
 
 build_release_$(BRANCH)/%.o: %.cc | build_release_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(RELEASE_FLAGS) -o $@ -c $<

@@ -4,9 +4,22 @@
 
 #include <AntTweakBar.h>
 
+#if defined(__clang__)
+
+// sudo apt-get install libglfw3 libglfw3-de
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <glfw.h>
+
+#else
+
 #include <gl.h>
 #include <glu.h>
 #include <glfw.h>
+
+#endif
+
+
 
 #include <windows.h>
 #include <direct.h>

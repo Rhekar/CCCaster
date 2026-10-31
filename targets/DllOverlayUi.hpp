@@ -5,6 +5,7 @@
 #include <d3dx9.h>
 #include <cstdint>
 
+#include "DllChatManager.hpp"
 
 #define DEFAULT_MESSAGE_TIMEOUT ( 3000 )
 
@@ -53,8 +54,11 @@ void updateText ( const std::array<std::string, 3>& text );
 
 void updateSelector ( uint8_t index, int position = 0, const std::string& line = "" );
 
-
 void showMessage ( const std::string& text, int timeout = DEFAULT_MESSAGE_TIMEOUT );
+
+void showChatMessage(int index, const ChatMessage& m);
+
+void showTypingDialogue(const std::string& m);
 
 void updateMessage();
 
