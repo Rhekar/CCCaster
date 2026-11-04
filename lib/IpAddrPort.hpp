@@ -48,11 +48,7 @@ public:
         return *this;
     }
 
-    void invalidate() const override
-    {
-        Serializable::invalidate();
-        _addrInfo.reset();
-    }
+    void invalidate() const override;
 
     const std::shared_ptr<addrinfo>& getAddrInfo() const;
 

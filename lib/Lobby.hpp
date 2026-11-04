@@ -44,8 +44,8 @@ public:
     void disconnect();
     void host( std::string name, IpAddrPort port );
     void unhost();
-    std::string join( std::string name, int selection );
-    void join( std::string name, std::string code );
+    std::string connect( std::string name, int selection );
+    void connect( std::string name, std::string code );
     void challenge( std::string target, IpAddrPort port );
     void create( std::string name, std::string type );
     void preaccept( std::string id );

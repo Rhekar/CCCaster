@@ -277,7 +277,7 @@ void MainUi::lobby( RunFuncPtr run )
                 LOG( result);
                 if ( _lobby->checkLobbyCode( result ) ) {
                     display ( "Joining lobby..." );
-                    _lobby->join( name, result );
+                    _lobby->connect( name, result );
                     lobbyDisplay = "Room code: " + result;
                     wait();
                     _ui->pop();
@@ -294,7 +294,7 @@ void MainUi::lobby( RunFuncPtr run )
                 break;
             } else {
                 display ( "Joining lobby..." );
-                string code = _lobby->join( name, mode );
+                string code = _lobby->connect( name, mode );
                 lobbyDisplay = "Room code: " + code;
                 wait();
                 _ui->pop();

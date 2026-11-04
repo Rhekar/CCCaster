@@ -90,7 +90,7 @@ void Socket::init()
         else
             _fd = ::socket ( res->ai_family, SOCK_DGRAM, IPPROTO_UDP );
 
-        if ( _fd == INVALID_SOCKET )
+        if ( ( SOCKET ) _fd == INVALID_SOCKET )
         {
             exc = WinException ( WSAGetLastError(), "socket failed", ERROR_NETWORK_GENERIC );
             _fd = 0;

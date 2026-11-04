@@ -62,7 +62,7 @@ UdpSocket::UdpSocket ( Socket::Owner *owner, const SocketShareData& data )
 
     _fd = WSASocket ( data.info->iAddressFamily, SOCK_DGRAM, IPPROTO_UDP, data.info.get(), 0, 0 );
 
-    if ( _fd == INVALID_SOCKET )
+    if ( ( SOCKET ) _fd == INVALID_SOCKET )
     {
         LOG_UDP_SOCKET ( this, "WSASocket failed" );
         _fd = 0;

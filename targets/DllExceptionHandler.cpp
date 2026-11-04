@@ -66,9 +66,15 @@ namespace ExceptionHandler {
 		return std::string(buffer);
 	}
 
-	std::string toUTF8(const std::wstring& wide_string) { //https://json.nlohmann.me/home/faq/#parse-errors-reading-non-ascii-characters
-		static std::wstring_convert<std::codecvt_utf8<wchar_t>> utf8_conv;
-		return utf8_conv.to_bytes(wide_string);
+	std::string toUTF8(const std::wstring& wide_string) {
+		if (wide_string.empty())
+			return {};
+		int size = WideCharToMultiByte(CP_UTF8, 0, wide_string.data(), (int)wide_string.size(), nullptr, 0, nullptr, nullptr);
+		if (size <= 0)
+			return {};
+		std::string out(size, '\0');
+		WideCharToMultiByte(CP_UTF8, 0, wide_string.data(), (int)wide_string.size(), out.data(), size, nullptr, nullptr);
+		return out;
 	}
 
 	bool GetPdbInfo(HMODULE module, GUID& guid, DWORD& age, char* pdbName) {
@@ -105,7 +111,7 @@ namespace ExceptionHandler {
 			auto* cv = base + debug[i].AddressOfRawData;
 
 			// RSDS signature
-			if (*reinterpret_cast<DWORD*>(cv) != 'SDSR') // little-endian "RSDS"
+			if (*reinterpret_cast<DWORD*>(cv) != 0x53445352) // little-endian "RSDS"
 				continue;
 
 			log("IMA LOSE IT");
@@ -201,7 +207,7 @@ namespace ExceptionHandler {
 
         char crashPath[MAX_PATH] = {'\0'};
         LPVOID crashBase = NULL;
-        uintptr_t crashOffset = NULL;
+        uintptr_t crashOffset = 0;
 
         bool foundCrash = false;
 

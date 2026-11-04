@@ -164,7 +164,7 @@ void Lobby::socketRead ( Socket *socket, const char *bytes, size_t len, const Ip
             numEntries = stoi( rawdata[1] );
             publiclobbies.clear();
             roomcodes.clear();
-            for( uint32_t i = 2; i < numEntries + 2; ++i ) {
+            for( int i = 2; i < numEntries + 2; ++i ) {
                 vector<string> codeplayer = split( rawdata[i], "\x1e" );
                 string code = codeplayer[0];
                 roomcodes.push_back( code );
@@ -188,7 +188,7 @@ void Lobby::socketRead ( Socket *socket, const char *bytes, size_t len, const Ip
             lobbyentries.clear();
             lobbyips.clear();
             lobbyids.clear();
-            for( uint32_t i = 2; i < numEntries + 2; ++i ) {
+            for( int i = 2; i < numEntries + 2; ++i ) {
                 vector<string> players = split( rawdata[i], "\x1e" );
                 string name = players[0];
                 LOG(name);
@@ -352,13 +352,13 @@ void Lobby::unhost() {
     }
 }
 
-string Lobby::join( string name, int selection ) {
+string Lobby::connect( string name, int selection ) {
     string code = roomcodes[selection];
-    join( name, code );
+    connect( name, code );
     return code;
 }
 
-void Lobby::join( string name, string code ) {
+void Lobby::connect( string name, string code ) {
     const string request = format ( "CJOIN," + name + "|" + code );
     _timer.reset ( new Timer ( this ) );
     _timer->start ( 3000 );
@@ -415,7 +415,7 @@ bool Lobby::checkLobbyCode( string code ) {
     if ( code.size() < 2 || code.size() > 8 ) {
         return false;
     }
-    for ( uint32_t i; i < code.size(); ++i ) {
+    for ( uint32_t i = 0; i < code.size(); ++i ) {
         if ( !isalnum( code[i] ) ) {
             return false;
         }

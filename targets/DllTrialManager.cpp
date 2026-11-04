@@ -10,8 +10,6 @@
 #include "Sequences.hpp"
 
 #include <fstream>
-#include <locale>
-#include <codecvt>
 #include <string>
 #include <windows.h>
 #include <mmsystem.h>
@@ -763,9 +761,13 @@ void DllTrialManager::frameStepTrial()
 */
 
 wstring tmp( string s ){
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    //std::string narrow = converter.to_bytes(wide_utf16_source_string);
-    std::wstring wide = converter.from_bytes(s);
+    if ( s.empty() )
+        return {};
+    int size = MultiByteToWideChar( CP_UTF8, 0, s.data(), ( int ) s.size(), nullptr, 0 );
+    if ( size <= 0 )
+        return {};
+    wstring wide( size, L'\0' );
+    MultiByteToWideChar( CP_UTF8, 0, s.data(), ( int ) s.size(), wide.data(), size );
     return wide;
 }
 void DllTrialManager::loadTrialFile()

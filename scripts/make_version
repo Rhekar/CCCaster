@@ -1,7 +1,7 @@
 #!/bin/sh
 
 CODE=$1
-CLEAN=`git status | grep "^nothing to commit, working tree clean$" | sed -r s/.+clean$/clean/g`
+CLEAN=`git status | grep "^nothing to commit, working tree clean$" | sed -E 's/.+clean$/clean/g'`
 COMMIT_ID=`git rev-parse --short HEAD`
 
 printf "const Version LocalVersion (\n"

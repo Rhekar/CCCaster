@@ -62,7 +62,7 @@ TcpSocket::TcpSocket ( Socket::Owner *owner, const SocketShareData& data )
 
     _fd = WSASocket ( data.info->iAddressFamily, SOCK_STREAM, IPPROTO_TCP, data.info.get(), 0, 0 );
 
-    if ( _fd == INVALID_SOCKET )
+    if ( ( SOCKET ) _fd == INVALID_SOCKET )
     {
         LOG_SOCKET ( this, "WSASocket failed" );
         _fd = 0;
@@ -106,7 +106,7 @@ SocketPtr TcpSocket::accept ( Socket::Owner *owner )
 
     const int newFd = ::accept ( _fd, ( sockaddr * ) &sas, &saLen );
 
-    if ( newFd == INVALID_SOCKET )
+    if ( ( SOCKET ) newFd == INVALID_SOCKET )
     {
         const int error = WSAGetLastError();
         LOG_SOCKET ( this, "[%d] %s; accept failed", error, WinException::getAsString ( error ) );

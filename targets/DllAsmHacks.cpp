@@ -176,7 +176,7 @@ extern "C" void loadingStateColorCb()
 
     loadingStateColorCb2 ( ptr );
 }
-extern "C" void (*drawInputHistory) () = (void(*)()) 0x479460;
+void ( *drawInputHistory )() = ( void ( * )() ) 0x479460;
 
 extern "C" int CallDrawText ( int width, int height, int xAddr, int yAddr, char* text, int textAlpha, int textShade, int textShade2, void* addr, int spacing, int layer, char* out );
 /*

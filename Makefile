@@ -112,7 +112,10 @@ CC_FLAGS +=  -mmmx -msse -msse2 -msse3 -mssse3
 CC_FLAGS += -std=c++2a
 #CC_FLAGS += -fconcepts # use if on gcc
 
+# Codeview is broken on gcc16, you can probably drop this after it gets patched
+ifneq ($(UNAME),Darwin)
 CC_FLAGS += -gcodeview 
+endif
 #INCLUDES += 
 
 # Linker flags
@@ -172,7 +175,7 @@ ifneq (,$(findstring release,$(MAKECMDGOALS)))
 		$(ZIP) $(ARCHIVE) -j scripts/Add_Handler_Protocol.bat
 		$(ZIP) $(ARCHIVE) -j $(RELAY_LIST)
 		$(ZIP) $(ARCHIVE) -j $(LOBBY_LIST)
-		$(ZIP) $(ARCHIVE) -j hook.pdb
+		if [ -f hook.pdb ]; then $(ZIP) $(ARCHIVE) -j hook.pdb; fi
 		cp -r res/GRP GRP
 		$(ZIP) $(ARCHIVE) -r GRP
 		$(ZIP) $(ARCHIVE) -r cccaster/trials 
@@ -483,7 +486,7 @@ build_debug_$(BRANCH)/%.o: %.cc | build_debug_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(DEBUG_FLAGS) -o $@ -c $<
 
 build_debug_$(BRANCH)/%.o: %.c | build_debug_$(BRANCH)
-	$(GCC) $(filter-out -fno-rtti,$(CC_FLAGS) $(DEBUG_FLAGS)) -Wno-attributes -o $@ -c $<
+	$(GCC) $(filter-out -fno-rtti -std=c++2a,$(CC_FLAGS) $(DEBUG_FLAGS)) -Wno-attributes -o $@ -c $<
 
 
 build_logging_$(BRANCH):
@@ -496,7 +499,7 @@ build_logging_$(BRANCH)/%.o: %.cc | build_logging_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(LOGGING_FLAGS) -o $@ -c $<
 
 build_logging_$(BRANCH)/%.o: %.c | build_logging_$(BRANCH)
-	$(GCC) $(filter-out -fno-rtti,$(CC_FLAGS) $(LOGGING_FLAGS)) -Wno-attributes -o $@ -c $<
+	$(GCC) $(filter-out -fno-rtti -std=c++2a,$(CC_FLAGS) $(LOGGING_FLAGS)) -Wno-attributes -o $@ -c $<
 
 
 build_release_$(BRANCH):
@@ -509,5 +512,5 @@ build_release_$(BRANCH)/%.o: %.cc | build_release_$(BRANCH)
 	$(CXX) $(CC_FLAGS) $(RELEASE_FLAGS) -o $@ -c $<
 
 build_release_$(BRANCH)/%.o: %.c | build_release_$(BRANCH)
-	$(GCC) $(filter-out -fno-rtti,$(CC_FLAGS) $(RELEASE_FLAGS)) -Wno-attributes -o $@ -c $<
+	$(GCC) $(filter-out -fno-rtti -std=c++2a,$(CC_FLAGS) $(RELEASE_FLAGS)) -Wno-attributes -o $@ -c $<
 
