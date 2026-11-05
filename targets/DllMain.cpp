@@ -1601,6 +1601,14 @@ struct DllMain
                 if ( options[Options::AppDir] )
                     ProcessManager::appDir = options.arg ( Options::AppDir );
 
+                if ( options[Options::LogRedact] )
+                {
+                    const string& r = options.arg ( Options::LogRedact );
+                    const size_t bar = r.find ( '|' );
+                    if ( bar != string::npos )
+                        Logger::get().redact ( r.substr ( 0, bar ), r.substr ( bar + 1 ) );
+                }
+
                 if ( options[Options::HeldStartDuration] )
                     netMan.heldStartDuration = lexical_cast<uint32_t> ( options.arg ( Options::HeldStartDuration ) );
 

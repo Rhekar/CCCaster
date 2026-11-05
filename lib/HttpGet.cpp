@@ -42,12 +42,16 @@ void HttpGet::start()
     _headerBuffer.clear();
     _dataBuffer.clear();
     _remainingBytes = 0;
+    _contentLength = 0;
 
-    LOG ( "Connecting to: '%s:80'", _host );
+    // "host" uses port 80; "host:port" (e.g. a local registry) uses its own port
+    const string hostPort = ( _host.find ( ':' ) == string::npos ? _host + ":80" : _host );
+
+    LOG ( "Connecting to: '%s'", hostPort );
 
     try
     {
-        _socket = TcpSocket::connect ( this, _host + ":80", true, timeout ); // Raw socket
+        _socket = TcpSocket::connect ( this, hostPort, true, timeout ); // Raw socket
     }
     catch ( ... )
     {
@@ -66,7 +70,8 @@ void HttpGet::socketConnected ( Socket *socket )
 
     const string request = format ( "GET %s HTTP/1.1\r\nUser-Agent: %s\r\nHost: %s\r\n\r\n", _path, USER_AGENT, _host );
 
-    LOG ( "Sending request:\n%s", request );
+    if ( ! quiet )
+        LOG ( "Sending request:\n%s", request );
 
     _timer.reset ( new Timer ( this ) );
     _timer->start ( timeout );
@@ -128,7 +133,8 @@ void HttpGet::parseResponse ( const string& data )
     // Start a timeout for the next read event
     _timer->start ( timeout );
 
-    LOG ( "Trying to parse response:\n%s", _headerBuffer );
+    if ( ! quiet )
+        LOG ( "Trying to parse response:\n%s", _headerBuffer );
 
     stringstream ss ( _headerBuffer );
     string header;
@@ -148,7 +154,9 @@ void HttpGet::parseResponse ( const string& data )
 
             if ( responseBytes == 0 )
             {
-                finalize();
+                // The body may arrive in a later read: only finish now if there is none
+                if ( _remainingBytes == 0 )
+                    finalize();
                 return;
             }
 
@@ -159,7 +167,8 @@ void HttpGet::parseResponse ( const string& data )
             return;
         }
 
-        LOG ( "Header: '%s'", trimmed ( header ) );
+        if ( ! quiet )
+            LOG ( "Header: '%s'", trimmed ( header ) );
 
         // Skip all the headers except Content-Length
         if ( header.find ( "Content-Length:" ) == 0 )
