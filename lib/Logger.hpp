@@ -6,6 +6,8 @@
 #include "StringUtils.hpp"
 
 #include <string>
+#include <vector>
+#include <utility>
 #include <cstdio>
 #include <ctime>
 
@@ -39,6 +41,12 @@ public:
     // Log the system version
     void logVersion();
 
+    // Replace every later occurrence of text in the log with replacement (e.g. a host address joined by code)
+    void redact ( const std::string& text, const std::string& replacement );
+
+    // Apply the redactions to a message
+    std::string redacted ( const std::string& message ) const;
+
     // Log a message with source file, line, and function
     void log ( const char *srcFile, int srcLine, const char *srcFunc, const char *logMessage );
 
@@ -64,6 +72,9 @@ private:
 
     // Flag to indicate if initialized
     bool _initialized = false;
+
+    // Text that must never reach the log, and what to write instead
+    std::vector<std::pair<std::string, std::string>> _redactions;
 
     // Optionally mutexed logging
 #ifdef LOGGER_MUTEXED

@@ -1,5 +1,6 @@
 #include "Main.hpp"
 #include "MainUi.hpp"
+#include "HostCode.hpp"
 #include "Version.hpp"
 #include "ConsoleUi.hpp"
 #include "Exceptions.hpp"
@@ -34,7 +35,6 @@ using namespace std;
     do {                                                                                                \
         ControllerManager::get().deinitialize();                                                        \
         run ( ADDRESS, CONFIG );                                                                        \
-        _codeLobby.reset();                                                                             \
         ControllerManager::get().loadMappings ( ProcessManager::appDir + FOLDER, MAPPINGS_EXT );        \
         ControllerManager::get().initialize ( this );                                                   \
     } while ( 0 )
@@ -73,7 +73,10 @@ void MainUi::netplay ( RunFuncPtr run )
 
     for ( ;; )
     {
-        menu->setInitial ( ( _address.addr.empty() && !_address.empty() )
+        // (the box shows the last code joined, or the last port hosted; never an address a code resolved to)
+        menu->setInitial ( ! HostCode::joinedCode().empty()
+                           ? HostCode::joinedCode()
+                           : ( _address.addr.empty() && !_address.empty() )
                            ? _address.str().substr ( 1 )
                            : "" );
 
@@ -87,6 +90,11 @@ void MainUi::netplay ( RunFuncPtr run )
         const string input = trimmed ( menu->resultStr );
         if ( input.empty() )
             break;
+
+        HostCode::clearJoinedCode();
+
+        // The address a code resolves to stays in this local: _address (shown in these boxes again) never holds it
+        IpAddrPort target;
 
         const bool portOnly = input.find_first_not_of ( "0123456789" ) == string::npos;
 
@@ -109,6 +117,7 @@ void MainUi::netplay ( RunFuncPtr run )
                 continue;
 
             initialConfig.mode.value = ClientMode::Host;
+            target = _address;
         }
         else if ( input.find ( ':' ) != string::npos )
         {
@@ -123,38 +132,21 @@ void MainUi::netplay ( RunFuncPtr run )
             }
 
             initialConfig.mode.value = ClientMode::Client;
+            target = _address;
         }
         else
         {
-            display ( "Looking up code..." );
-            bool reachedLobby = false;
-            const string found = resolveNetplayCode ( input, reachedLobby );
-            _ui->pop();
-
-            if ( found.empty() )
-            {
-                _ui->pushBelow ( new ConsoleUi::TextBox ( reachedLobby
-                                                          ? "No host for that code"
-                                                          : "Failed to connect to the lobby" ), { 1, 0 } ); // Expand width
+            if ( ! resolveCode ( input, target ) )
                 continue;
-            }
-
-            try
-            {
-                _address = found;
-            }
-            catch ( const Exception& exc )
-            {
-                _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
-                continue;
-            }
 
             initialConfig.mode.value = ClientMode::Client;
         }
 
         _netplayConfig.clear();
 
-        RUN ( _address, initialConfig );
+        RUN ( target, initialConfig );
+
+        target.clear();
 
         _ui->popNonUserInput();
 
@@ -538,13 +530,15 @@ void MainUi::spectate ( RunFuncPtr run )
     saveConfig();
 
     ConsoleUi::Prompt *menu = new ConsoleUi::Prompt ( ConsoleUi::Prompt::String,
-            "Enter/paste <ip>:<port> to spectate:" );
+            "Enter/paste a code or <ip>:<port> to spectate:" );
 
     _ui->pushRight ( menu, { 1, 0 } ); // Expand width
 
     for ( ;; )
     {
-        menu->setInitial ( !_address.addr.empty() ? _address.str() : "" );
+        menu->setInitial ( ! HostCode::joinedCode().empty()
+                           ? HostCode::joinedCode()
+                           : !_address.addr.empty() ? _address.str() : "" );
 
         _ui->popUntilUserInput();
 
@@ -553,20 +547,35 @@ void MainUi::spectate ( RunFuncPtr run )
 
         _ui->clearBelow();
 
-        try
-        {
-            _address = trimmed ( menu->resultStr );
-        }
-        catch ( const Exception& exc )
-        {
-            _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
-            continue;
-        }
+        HostCode::clearJoinedCode();
 
-        if ( _address.addr.empty() )
+        // (a code's address stays in this local, never in _address)
+        IpAddrPort target;
+
+        if ( HostCode::isCode ( menu->resultStr ) )
         {
-            _ui->pushBelow ( new ConsoleUi::TextBox ( ERROR_INVALID_ADDR_PORT ), { 1, 0 } ); // Expand width
-            continue;
+            if ( ! resolveCode ( menu->resultStr, target ) )
+                continue;
+        }
+        else
+        {
+            try
+            {
+                _address = trimmed ( menu->resultStr );
+            }
+            catch ( const Exception& exc )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
+            if ( _address.addr.empty() )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( ERROR_INVALID_ADDR_PORT ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
+            target = _address;
         }
 
         initialConfig.mode.value = ClientMode::SpectateNetplay; // is this the issue?
@@ -574,7 +583,9 @@ void MainUi::spectate ( RunFuncPtr run )
             initialConfig.mode.value = ClientMode::SpectateBroadcast;
         }
     
-        RUN ( _address, initialConfig );
+        RUN ( target, initialConfig );
+
+        target.clear();
     
         _ui->popNonUserInput();
 
@@ -1710,6 +1721,7 @@ void MainUi::initialize()
     _config.setInteger ("disableChat", 0);
 	_config.setInteger ("winCountHUD", 0);
     _config.setInteger ( "hostClipboard", 0 );
+    _config.setInteger ( "linkHandler", 1 );   // 1: register cccaster: links (join/<code>, watch/<code>) to this exe
 
     // Cached UI state (defaults)
     _config.setInteger ( "lastUsedPort", -1 );
@@ -1940,84 +1952,31 @@ void MainUi::main ( RunFuncPtr run )
     ControllerManager::get().deinitialize();
 }
 
-static void setClipboard ( const string& str )
+bool MainUi::resolveCode ( const string& input, IpAddrPort& address )
 {
-    if ( OpenClipboard ( 0 ) )
+    const string code = HostCode::normalize ( input );
+
+    if ( code.empty() )
     {
-        HGLOBAL clipbuffer = GlobalAlloc ( GMEM_DDESHARE, str.size() + 1 );
-        char *buffer = ( char * ) GlobalLock ( clipbuffer );
-        strcpy ( buffer, LPCSTR ( str.c_str() ) );
-        GlobalUnlock ( clipbuffer );
-        EmptyClipboard();
-        SetClipboardData ( CF_TEXT, clipbuffer );
-        CloseClipboard();
-    }
-    else
-    {
-        LOG ( "OpenClipboard failed: %s", WinException::getLastError() );
-    }
-}
-
-string MainUi::resolveNetplayCode ( const string& code, bool& reachedLobby )
-{
-    reachedLobby = false;
-    if ( serverList.empty() )
-        return "";
-
-    AutoManager _;
-    _.doDeinit = true;
-
-    Lobby lookup ( this );
-    lookup._address = serverList.front();
-    lookup.resolveCode ( code );
-
-    {
-        LOCK ( uiMutex );
-        lookup.start();
-        wait();
+        _ui->pushBelow ( new ConsoleUi::TextBox ( "Not a code, an <ip>:<port>, or a port" ), { 1, 0 } ); // Expand width
+        return false;
     }
 
-    // Lobby::stop signals uiMutex when the thread finishes, so it must be unlocked here.
-    EventManager::get().stop();
-    lookup.join();
+    _ui->pushBelow ( new ConsoleUi::TextBox ( "Looking up " + code + "..." ), { 1, 0 } ); // Expand width
 
-    reachedLobby = lookup.connectionSuccess;
-    return lookup.codeReply;
-}
+    string error;
+    const bool found = HostCode::resolve ( code, address, error );
 
-void MainUi::registerNetplayCode ( uint16_t port )
-{
-    _codeLobby.reset();
-    if ( serverMode || port == 0 || serverList.empty() )
-        return;
+    _ui->pop();
 
-    string name = initialConfig.localName;
-    for ( char& c : name )
+    if ( ! found )
     {
-        if ( c == '|' || c == '\n' || c == '\r' || c == '\x1f' || c == '\x1e' )
-            c = ' ';
+        address.clear();
+        _ui->pushBelow ( new ConsoleUi::TextBox ( error ), { 1, 0 } ); // Expand width
+        return false;
     }
-    if ( name.size() > 16 )
-        name.resize ( 16 );
 
-    _codeLobby.reset ( new Lobby ( this ) );
-    _codeLobby->_address = serverList.front();
-    _codeLobby->registerCode ( port, name );
-}
-
-void MainUi::codeRegistered ( Lobby *lobby )
-{
-    if ( lobby != _codeLobby.get() || !copiesHostCode() )
-        return;
-
-    const bool broadcast = initialConfig.mode.isBroadcast() || _netplayConfig.mode.isBroadcast();
-    const bool training = initialConfig.mode.isTraining() || _netplayConfig.mode.isTraining();
-    setClipboard ( lobby->codeReply );
-    display ( format ( "%s at %s%s\n(Code copied to clipboard)",
-                       broadcast ? "Broadcasting" : "Hosting",
-                       lobby->codeReply,
-                       training ? " (training mode)" : "" ) );
-    hostReady();
+    return true;
 }
 
 void MainUi::display ( const string& message, bool replace )
@@ -2541,9 +2500,6 @@ void MainUi::fetchProgress ( MainUpdater *updater, const MainUpdater::Type& type
 void MainUi::connectionFailed ( Lobby *lobby )
 {
     LOG( "mainUI Lobby Connection Failed" );
-    // The code lobby shares the netplay event loop; losing it only drops the code.
-    if ( lobby == _codeLobby.get() )
-        return;
     EventManager::get().stop();
     if ( !lobby->connectionSuccess )
         unlock( lobby );

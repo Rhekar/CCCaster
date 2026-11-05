@@ -32,6 +32,9 @@ public:
 
     const enum Mode { Buffered, Incremental } mode;
 
+    // Don't log the request path or the response (they may hold secrets or addresses)
+    bool quiet = false;
+
     HttpGet ( Owner *owner, const std::string& url, uint64_t timeout = DEFAULT_GET_TIMEOUT, Mode mode = Buffered );
 
     void start();
