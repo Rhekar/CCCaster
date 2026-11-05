@@ -4,6 +4,8 @@
 #include "Socket.hpp"
 #include "Timer.hpp"
 
+#include <cstdint>
+
 #define DEFAULT_GET_TIMEOUT ( 5000 )
 
 enum GameType
@@ -18,6 +20,7 @@ enum LobbyMode
     CONCERTO_BROWSE,
     CONCERTO_LOBBY,
     DEFAULT_LOBBY,
+    CODE,
 };
 
 class Lobby
@@ -30,6 +33,7 @@ public:
     {
         virtual void connectionFailed( Lobby* lobby ) = 0;
         virtual void unlock( Lobby* lobby ) = 0;
+        virtual void codeRegistered( Lobby* lobby ) = 0;
     };
 
     Owner *owner = 0;
@@ -54,6 +58,15 @@ public:
     void fetchPublicLobby();
     bool checkLobbyCode( std::string code );
 
+    // Connects on the running event loop and asks for a netplay code for this
+    // port. The owner gets codeRegistered once codeReply is set. The code lasts
+    // until this lobby's socket closes.
+    void registerCode( uint16_t port, const std::string& name );
+
+    // Queues a lookup of a netplay code, sent once start() connects. The owner
+    // gets unlock once codeReply holds "ip:port", or is empty for an unknown code.
+    void resolveCode( const std::string& code );
+
     void init( Owner* owner );
 
     void stop();
@@ -70,6 +83,7 @@ public:
 
     std::string lobbyError;
     std::string lobbyMsg;
+    std::string codeReply;
 
 
 private:
@@ -88,6 +102,8 @@ private:
     std::vector<std::string> lobbyids;
 
     bool hostResponse;
+
+    std::string _codeRequest;
 
     // Socket callbacks
     void socketAccepted ( Socket *socket ) override {}

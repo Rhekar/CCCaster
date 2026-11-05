@@ -201,14 +201,7 @@ struct MainApp
 
         _.doDeinit = !EventManager::get().isRunning();
 
-        if ( clientMode.isHost() )
-        {
-            if ( !ui.isServer() ) {
-                externalIpAddress.start();
-            }
-            updateStatusMessage();
-        }
-        else
+        if ( !clientMode.isHost() )
         {
             if ( options[Options::Tunnel] ) {
                 if ( ui.isServer() ) {
@@ -232,6 +225,14 @@ struct MainApp
             address.invalidate();
 
             LOG ( "serverCtrlSocket=%08x", serverCtrlSocket.get() );
+
+            if ( !ui.isServer() )
+            {
+                ui.registerNetplayCode ( address.port );
+                externalIpAddress.start();
+            }
+
+            updateStatusMessage();
         }
         else
         {
@@ -1417,6 +1418,9 @@ private:
             return;
 
         const uint16_t port = ( clientMode.isBroadcast() ? netplayConfig.broadcastPort : address.port );
+        if ( ui.copiesHostCode() )
+            return;
+
         if ( ui.isServer() ) {
             ui.display ( format ( "%s at server%s\n",
                                   ( clientMode.isBroadcast() ? "Broadcasting" : "Hosting" ),

@@ -34,6 +34,7 @@ using namespace std;
     do {                                                                                                \
         ControllerManager::get().deinitialize();                                                        \
         run ( ADDRESS, CONFIG );                                                                        \
+        _codeLobby.reset();                                                                             \
         ControllerManager::get().loadMappings ( ProcessManager::appDir + FOLDER, MAPPINGS_EXT );        \
         ControllerManager::get().initialize ( this );                                                   \
     } while ( 0 )
@@ -66,7 +67,7 @@ MainUi::MainUi() : _updater ( this )
 void MainUi::netplay ( RunFuncPtr run )
 {
     ConsoleUi::Prompt *menu = new ConsoleUi::Prompt ( ConsoleUi::Prompt::String,
-            "Enter/paste <ip>:<port> to join or <port> to host:" );
+            "Enter/paste a code or <ip>:<port> to join, or a port to host:" );
 
     _ui->pushRight ( menu, { 1, 0 } ); // Expand width
 
@@ -74,7 +75,7 @@ void MainUi::netplay ( RunFuncPtr run )
     {
         menu->setInitial ( ( _address.addr.empty() && !_address.empty() )
                            ? _address.str().substr ( 1 )
-                           : _address.str() );
+                           : "" );
 
         _ui->popUntilUserInput();
 
@@ -83,18 +84,24 @@ void MainUi::netplay ( RunFuncPtr run )
 
         _ui->clearBelow();
 
-        try
-        {
-            _address = trimmed ( menu->resultStr );
-        }
-        catch ( const Exception& exc )
-        {
-            _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
-            continue;
-        }
+        const string input = trimmed ( menu->resultStr );
+        if ( input.empty() )
+            break;
 
-        if ( _address.addr.empty() )
+        const bool portOnly = input.find_first_not_of ( "0123456789" ) == string::npos;
+
+        if ( portOnly )
         {
+            try
+            {
+                _address = input;
+            }
+            catch ( const Exception& exc )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
             _config.setInteger ( "lastUsedPort", _address.port );
             saveConfig();
 
@@ -103,8 +110,45 @@ void MainUi::netplay ( RunFuncPtr run )
 
             initialConfig.mode.value = ClientMode::Host;
         }
+        else if ( input.find ( ':' ) != string::npos )
+        {
+            try
+            {
+                _address = input;
+            }
+            catch ( const Exception& exc )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
+            initialConfig.mode.value = ClientMode::Client;
+        }
         else
         {
+            display ( "Looking up code..." );
+            bool reachedLobby = false;
+            const string found = resolveNetplayCode ( input, reachedLobby );
+            _ui->pop();
+
+            if ( found.empty() )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( reachedLobby
+                                                          ? "No host for that code"
+                                                          : "Failed to connect to the lobby" ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
+            try
+            {
+                _address = found;
+            }
+            catch ( const Exception& exc )
+            {
+                _ui->pushBelow ( new ConsoleUi::TextBox ( exc.user ), { 1, 0 } ); // Expand width
+                continue;
+            }
+
             initialConfig.mode.value = ClientMode::Client;
         }
 
@@ -980,6 +1024,7 @@ void MainUi::settings()
         "Trial Input Guide Settings",
         "Experimental Settings",
         "Time Played",
+        "Copy when hosting",
         "About",
     };
 
@@ -1505,6 +1550,25 @@ void MainUi::settings()
 				
                 break;
             case 14:
+            {
+                _ui->pushInFront ( new ConsoleUi::Menu ( "Copy when hosting?",
+                { "Code", "IP address" }, "Cancel" ),
+                { 0, 0 }, true ); // Don't expand but DO clear top
+
+                _ui->top<ConsoleUi::Menu>()->setPosition ( _config.getInteger ( "hostClipboard" ) );
+                _ui->popUntilUserInput();
+
+                if ( _ui->top()->resultInt >= 0 && _ui->top()->resultInt <= 1 )
+                {
+                    _config.setInteger ( "hostClipboard", _ui->top()->resultInt );
+                    saveConfig();
+                }
+
+                _ui->pop();
+                break;
+            }
+
+            case 15:
                 _ui->pushInFront ( new ConsoleUi::TextBox ( format ( "CCCaster %s%s\n\nRevision %s\n\nBuilt on %s\n\n"
                                    "Created by Madscientist\n\nPress any key to go back",
                                    LocalVersion.code,
@@ -1643,8 +1707,9 @@ void MainUi::initialize()
     _config.setInteger ("bgmVolume", 10);
     _config.setInteger ("sfxVolume", 10);
     _config.setInteger ("timePlayed", 0);
-	_config.setInteger ("disableChat", 0);
-	_config.setInteger ("winCountHUD", 0); 
+    _config.setInteger ("disableChat", 0);
+	_config.setInteger ("winCountHUD", 0);
+    _config.setInteger ( "hostClipboard", 0 );
 
     // Cached UI state (defaults)
     _config.setInteger ( "lastUsedPort", -1 );
@@ -1873,6 +1938,86 @@ void MainUi::main ( RunFuncPtr run )
     }
 
     ControllerManager::get().deinitialize();
+}
+
+static void setClipboard ( const string& str )
+{
+    if ( OpenClipboard ( 0 ) )
+    {
+        HGLOBAL clipbuffer = GlobalAlloc ( GMEM_DDESHARE, str.size() + 1 );
+        char *buffer = ( char * ) GlobalLock ( clipbuffer );
+        strcpy ( buffer, LPCSTR ( str.c_str() ) );
+        GlobalUnlock ( clipbuffer );
+        EmptyClipboard();
+        SetClipboardData ( CF_TEXT, clipbuffer );
+        CloseClipboard();
+    }
+    else
+    {
+        LOG ( "OpenClipboard failed: %s", WinException::getLastError() );
+    }
+}
+
+string MainUi::resolveNetplayCode ( const string& code, bool& reachedLobby )
+{
+    reachedLobby = false;
+    if ( serverList.empty() )
+        return "";
+
+    AutoManager _;
+    _.doDeinit = true;
+
+    Lobby lookup ( this );
+    lookup._address = serverList.front();
+    lookup.resolveCode ( code );
+
+    {
+        LOCK ( uiMutex );
+        lookup.start();
+        wait();
+    }
+
+    // Lobby::stop signals uiMutex when the thread finishes, so it must be unlocked here.
+    EventManager::get().stop();
+    lookup.join();
+
+    reachedLobby = lookup.connectionSuccess;
+    return lookup.codeReply;
+}
+
+void MainUi::registerNetplayCode ( uint16_t port )
+{
+    _codeLobby.reset();
+    if ( serverMode || port == 0 || serverList.empty() )
+        return;
+
+    string name = initialConfig.localName;
+    for ( char& c : name )
+    {
+        if ( c == '|' || c == '\n' || c == '\r' || c == '\x1f' || c == '\x1e' )
+            c = ' ';
+    }
+    if ( name.size() > 16 )
+        name.resize ( 16 );
+
+    _codeLobby.reset ( new Lobby ( this ) );
+    _codeLobby->_address = serverList.front();
+    _codeLobby->registerCode ( port, name );
+}
+
+void MainUi::codeRegistered ( Lobby *lobby )
+{
+    if ( lobby != _codeLobby.get() || !copiesHostCode() )
+        return;
+
+    const bool broadcast = initialConfig.mode.isBroadcast() || _netplayConfig.mode.isBroadcast();
+    const bool training = initialConfig.mode.isTraining() || _netplayConfig.mode.isTraining();
+    setClipboard ( lobby->codeReply );
+    display ( format ( "%s at %s%s\n(Code copied to clipboard)",
+                       broadcast ? "Broadcasting" : "Hosting",
+                       lobby->codeReply,
+                       training ? " (training mode)" : "" ) );
+    hostReady();
 }
 
 void MainUi::display ( const string& message, bool replace )
@@ -2396,8 +2541,11 @@ void MainUi::fetchProgress ( MainUpdater *updater, const MainUpdater::Type& type
 void MainUi::connectionFailed ( Lobby *lobby )
 {
     LOG( "mainUI Lobby Connection Failed" );
+    // The code lobby shares the netplay event loop; losing it only drops the code.
+    if ( lobby == _codeLobby.get() )
+        return;
     EventManager::get().stop();
-    if ( !_lobby->connectionSuccess )
+    if ( !lobby->connectionSuccess )
         unlock( lobby );
 }
 
