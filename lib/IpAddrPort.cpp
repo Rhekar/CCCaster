@@ -112,11 +112,11 @@ IpAddrPort::IpAddrPort ( const sockaddr *sa )
     , port ( getPortFromSockAddr ( sa ) )
     , isV4 ( sa->sa_family == AF_INET ) {}
 
-void IpAddrPort::invalidate() const
+/*void IpAddrPort::invalidate() const
 {
     Serializable::invalidate();
     _addrInfo.reset();
-}
+}*/
 
 const shared_ptr<addrinfo>& IpAddrPort::getAddrInfo() const
 {
