@@ -162,6 +162,8 @@ void DllRollbackManager::allocateStates()
 
     for ( auto& sfxArray : _sfxHistory )
         memset ( &sfxArray[0], 0, CC_SFX_ARRAY_LEN );
+
+    memset ( &_rerunSfxPrev[0], 0, CC_SFX_ARRAY_LEN );
 }
 
 void DllRollbackManager::deallocateStates()
@@ -280,6 +282,9 @@ bool DllRollbackManager::loadState ( IndexedFrame indexedFrame, NetplayManager& 
                     AsmHacks::sfxFilterArray[j] = 0x80;
             }
 
+            // The re-run starts here: no plays counted yet
+            memcpy ( &_rerunSfxPrev[0], AsmHacks::sfxFilterArray, CC_SFX_ARRAY_LEN );
+
             return true;
         }
     }
@@ -292,14 +297,21 @@ void DllRollbackManager::saveRerunSounds ( uint32_t frame )
 {
     uint8_t *currentSfxArray = &_sfxHistory [ frame % NUM_ROLLBACK_STATES ][0];
 
-    // Rewrite the sound effects history during re-run
+    // Rewrite the sound effects history during re-run: a frame's entry is the SFX that played ON THAT FRAME, the same as
+    // a normal frame's entry. The filter's low bits count plays since the rollback, so they only ever grow during a
+    // re-run; marking every SFX with a non-zero count would also mark every later re-run frame with an SFX played once
+    // earlier in the re-run. Re-run frames are rollback targets too (each saves a state), and a later rollback to one
+    // of them would then flag that already-playing SFX as "played after the target", never see it re-triggered (it
+    // started before the target), and cancel it in finishedRerunSounds: sounds cut off part-way, or never heard
+    // because the filter also skips a genuine new play of the same SFX.
     for ( uint32_t j = 0; j < CC_SFX_ARRAY_LEN; ++j )
     {
-        if ( AsmHacks::sfxFilterArray[j] & ~0x80 )
-            currentSfxArray[j] = 1;
-        else
-            currentSfxArray[j] = 0;
+        const uint8_t now = AsmHacks::sfxFilterArray[j] & 0x7F;
+        const uint8_t before = _rerunSfxPrev[j] & 0x7F;
+        currentSfxArray[j] = ( now != before ) ? 1 : 0;
     }
+
+    memcpy ( &_rerunSfxPrev[0], AsmHacks::sfxFilterArray, CC_SFX_ARRAY_LEN );
 }
 
 void DllRollbackManager::finishedRerunSounds()
