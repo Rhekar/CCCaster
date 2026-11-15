@@ -100,4 +100,8 @@ private:
 
     // History of sound effect playbacks
     std::array<std::array<uint8_t, CC_SFX_ARRAY_LEN>, NUM_ROLLBACK_STATES> _sfxHistory;
+
+    // The SFX filter as it was after the previous re-run frame. The filter counts plays across the WHOLE re-run, so a
+    // re-run frame's own plays are the counts that grew since then.
+    std::array<uint8_t, CC_SFX_ARRAY_LEN> _rerunSfxPrev;
 };
