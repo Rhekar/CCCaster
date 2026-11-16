@@ -16,13 +16,17 @@ public:
     std::string code;
     std::string revision;
     std::string buildTime;
-
+    std::string buildInfo;
+    
     Version ( const char *code ) : code ( code ) {}
 
     Version ( const std::string& code ) : code ( code ) {}
 
     Version ( const std::string& code, const std::string& revision, const std::string& buildTime )
         : code ( code ), revision ( revision ), buildTime ( buildTime ) {}
+
+    Version ( const std::string& code, const std::string& revision, const std::string& buildTime, const std::string& buildInfo)
+        : code ( code ), revision ( revision ), buildTime ( buildTime ), buildInfo(buildInfo) {}
 
     std::string majorMinor() const { return major() + "." + minor(); }
 

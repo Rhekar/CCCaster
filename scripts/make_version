@@ -1,15 +1,20 @@
-#!/bin/sh
+#!/bin/bash
 
 CODE=$1
-CLEAN=`git status | grep "^nothing to commit, working tree clean$" | sed -E 's/.+clean$/clean/g'`
+#CLEAN=`git status | grep "^nothing to commit, working tree clean$" | sed -E 's/.+clean$/clean/g'`
+CLEAN=`git status -uno --porcelain`
 COMMIT_ID=`git rev-parse --short HEAD`
+# the syntax here is dumb as bricks
+BUILDINFO=`printf "$2" | tr '\\x' '/'`
 
 printf "const Version LocalVersion (\n"
 printf "    \"$CODE\",\n"
-if [ "$CLEAN" = "" ]; then
+if [ "$CLEAN" != "" ]; then
 printf "    \"$COMMIT_ID-custom\",\n"
 else
 printf "    \"$COMMIT_ID\",\n"
 fi
-printf "    \"`date`\"\n"
+printf "    \"`date`\",\n"
+printf "    \"%s\"\n" "$BUILDINFO"
 printf ");\n"
+  

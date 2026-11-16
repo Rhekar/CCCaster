@@ -113,7 +113,9 @@ CC_FLAGS += -std=c++2a
 #CC_FLAGS += -fconcepts # use if on gcc
 
 # Codeview is broken on gcc16, you can probably drop this after it gets patched
-ifneq ($(UNAME),Darwin)
+CANGCODEVIEW := $(shell $(CXX) -fsyntax-only -x c++ - < /dev/null -gcodeview)
+ifeq ($(.SHELLSTATUS),0) 
+$(info adding gcodeview to stuff)
 CC_FLAGS += -gcodeview 
 endif
 #INCLUDES += 
@@ -311,8 +313,11 @@ res/palettes.res: res/palettes.rc res/palettes.ico
 	@echo
 
 
+COMPILERVER := $(shell $(CXX) -fdiagnostics-color=never -v 2>&1)
+BUILDINFO = "{COMPILERVER: '$(COMPILERVER)', CC_FLAGS: '$(CC_FLAGS)', LD_FLAGS: '$(LD_FLAGS)'}"
+
 define make_version
-@scripts/make_version $(VERSION)$(SUFFIX) > lib/Version.local.hpp
+@scripts/make_version $(VERSION)$(SUFFIX) $(BUILDINFO) > lib/Version.local.hpp
 endef
 
 define make_protocol
