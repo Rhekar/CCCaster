@@ -1546,7 +1546,8 @@ void MainUi::settings()
                     ) ),
                      { 0, 0 }, true);
 
-                        system ( "@pause > nul" );
+                        //system ( "@pause > nul" );
+                        getch();
 				
                 break;
             case 14:
@@ -1581,7 +1582,11 @@ void MainUi::settings()
 #endif
                                    LocalVersion.revision, LocalVersion.buildTime ) ),
                 { 0, 0 }, true ); // Don't expand but DO clear top
-                system ( "@pause > nul" );
+                 
+                // is this whats causing the weird text corruption? WHY
+                //system ( "@pause > nul" );
+                //system("pause");
+                getch();
                 break;
             default:
                 break;
