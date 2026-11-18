@@ -5,6 +5,7 @@
 #include "StringUtils.hpp"
 #include "ConsoleUi.hpp"
 #include "Version.hpp"
+#include "HostCode.hpp"
 
 #include <optionparser.h>
 #include <windows.h>
@@ -30,6 +31,14 @@ void runMain ( const IpAddrPort& address, const Serializable& config );
 void runFake ( const IpAddrPort& address, const Serializable& config );
 void stopMain();
 
+
+// This exe's full path (for the cccaster: link registration)
+static string exePath()
+{
+    char buffer[4096];
+    const DWORD n = GetModuleFileNameA ( GetModuleHandle ( 0 ), buffer, sizeof ( buffer ) );
+    return n && n < sizeof ( buffer ) ? string ( buffer, n ) : string();
+}
 
 static bool initDirsAndSanityCheck ( bool checkGameExe = true )
 {
@@ -333,12 +342,36 @@ int main ( int argc, char *argv[] )
     vector<string> tmpNewArgs;
     vector<char *> tmpCharPtrs;
 
+    // From a link: cccaster:join/<code>, cccaster:watch/<code> (or spectate/<code>), cccaster:host/<token>, else the
+    // stock "cccaster:<args>"
+    bool linkHost = false;
+
     // Strip protocol prefix and tokenize the first arg
     if ( argc > 0 && string ( argv[0] ).find ( protocolPrefix ) == 0 )
     {
         argv[0] += protocolPrefix.size();
 
-        tmpNewArgs = split ( argv[0] );
+        // (a browser starts us in its own folder: relay_list.txt, lobby_list.txt and code_list.txt are in ours)
+        const string exe = exePath();
+        const size_t slash = exe.find_last_of ( "\\/" );
+        if ( slash != string::npos )
+            SetCurrentDirectoryA ( exe.substr ( 0, slash + 1 ).c_str() );
+
+        string linkValue;
+        const HostCode::Link link = HostCode::parseLink ( argv[0], linkValue );
+
+        if ( link == HostCode::Link::Join )
+            tmpNewArgs = { linkValue };
+        else if ( link == HostCode::Link::Spectate )
+            tmpNewArgs = { "-s", linkValue };
+        else if ( link == HostCode::Link::Host )
+        {
+            // (hosts on the last used port; the token lets the website that made the link show the code)
+            HostCode::setSiteToken ( linkValue );
+            linkHost = true;
+        }
+        else
+            tmpNewArgs = split ( argv[0] );
 
         for ( string& newArg : tmpNewArgs )
         {
@@ -346,7 +379,7 @@ int main ( int argc, char *argv[] )
             tmpCharPtrs.push_back ( &newArg[0] );
         }
 
-        argv = &tmpCharPtrs[0];
+        argv = tmpCharPtrs.empty() ? argv : &tmpCharPtrs[0];
         argc = ( int ) tmpNewArgs.size();
     }
 
@@ -428,6 +461,10 @@ int main ( int argc, char *argv[] )
 
     // Initialize config
     ui.initialize();
+
+    if ( ui.getConfig().getInteger ( "linkHandler" ) != 0 && ! opt[Options::NoUi] && ! opt[Options::Dummy] )
+        HostCode::registerLinks ( exePath() );
+
     ui.initialConfig.mode.flags |= ( opt[Options::Training] && !opt[Options::Tournament] ? ClientMode::Training : 0 );
 
     if ( opt[Options::Spectate] ) {
@@ -463,7 +500,14 @@ int main ( int argc, char *argv[] )
     for ( int i = 2; i < parser.nonOptionsCount(); ++i )
         lastError += format ( "Non-option (%d): '%s'\n", i, parser.nonOption ( i ) );
 
-    if ( opt[Options::Offline] || opt[Options::Tournament] )
+    if ( linkHost )
+    {
+        const int last = ui.getConfig().getInteger ( "lastUsedPort" );
+        ui.initialConfig.mode.value = ClientMode::Host;
+        ConsoleUi::clearScreen();
+        run ( IpAddrPort ( "", ( uint16_t ) ( last > 0 && last < 65536 ? last : 46318 ) ), ui.initialConfig );
+    }
+    else if ( opt[Options::Offline] || opt[Options::Tournament] )
     {
         NetplayConfig netplayConfig;
         netplayConfig.mode.value = ClientMode::Offline;
@@ -515,7 +559,23 @@ int main ( int argc, char *argv[] )
     }
     else if ( parser.nonOptionsCount() == 1 )
     {
-        const IpAddrPort address = tryParseIpAddrPort ( parser.nonOption ( 0 ) );
+        IpAddrPort address;
+
+        if ( HostCode::isCode ( parser.nonOption ( 0 ) ) )
+        {
+            // A code (a link, or typed after the exe): the registry -> the host's address (never shown); then the
+            // normal connect path. -s spectates it.
+            string error;
+            if ( ! HostCode::resolve ( parser.nonOption ( 0 ), address, error ) )
+                lastError = error;
+
+            if ( ui.initialConfig.mode.value == ClientMode::Unknown )
+                ui.initialConfig.mode.value = ClientMode::Client;
+        }
+        else
+        {
+            address = tryParseIpAddrPort ( parser.nonOption ( 0 ) );
+        }
 
         if ( ui.initialConfig.mode.value == ClientMode::Unknown )
             ui.initialConfig.mode.value = ( address.addr.empty() ? ClientMode::Host : ClientMode::Client );

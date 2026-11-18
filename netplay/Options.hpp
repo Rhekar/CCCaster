@@ -41,7 +41,8 @@ ENUM ( Options,
        NoFork,
        AppDir,
        SessionId,
-       HeldStartDuration );
+       HeldStartDuration,
+       LogRedact );   // "<text>|<replacement>": the game's log hides an address joined by host code
 
 
 // Forward declaration

@@ -5,6 +5,28 @@
 using namespace std;
 
 
+void Logger::redact ( const string& text, const string& replacement )
+{
+    if ( text.empty() )
+        return;
+    for ( const auto& r : _redactions )
+        if ( r.first == text )
+            return;
+    _redactions.push_back ( { text, replacement } );
+}
+
+string Logger::redacted ( const string& message ) const
+{
+    string out = message;
+    for ( const auto& r : _redactions )
+    {
+        for ( size_t i = out.find ( r.first ); i != string::npos; i = out.find ( r.first, i + r.second.size() ) )
+            out.replace ( i, r.first.size(), r.second );
+    }
+    return out;
+}
+
+
 #ifdef DISABLE_LOGGING
 
 void Logger::initialize ( const string& filePath, uint32_t _options ) {}
@@ -133,7 +155,10 @@ void Logger::log ( const char *srcFile, int srcLine, const char *srcFunc, const 
         hasPrefix = true;
     }
 
-    fprintf ( _fd, ( hasPrefix ? " %s\n" : "%s\n" ), logMessage );
+    if ( _redactions.empty() )
+        fprintf ( _fd, ( hasPrefix ? " %s\n" : "%s\n" ), logMessage );
+    else
+        fprintf ( _fd, ( hasPrefix ? " %s\n" : "%s\n" ), redacted ( logMessage ).c_str() );
     fflush ( _fd );
 }
 

@@ -1,0 +1,3 @@
+# The host code registry (scripts/hostcode_registry/codes_server.mjs). The first line that is not blank or a
+# comment is used; plain http:// only. To use your own registry, put its URL here.
+http://watch.meltyblood.org/hc

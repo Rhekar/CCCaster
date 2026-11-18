@@ -1,6 +1,5 @@
 #!/usr/bin/env python38
 import asyncio
-import random
 import socket
 import struct
 import time
@@ -26,83 +25,6 @@ regionMap = { "NA West":"NorthAmericaWest", "NA East":"NorthAmericaEast",
               "Middle East":"MiddleEast", "Asia":"Japan", "OCE":"Australia" };
 
 activeConnections = {}
-
-CODE_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-CODE_ALPHABET = CODE_LETTERS + "23456789"
-codes = {}
-codesByConn = {}
-# connectionid -> writer. Each watcher is sent a fresh list when a host enters or leaves.
-codeWatchers = {}
-codeLock = None
-
-def getCodeLock():
-    global codeLock
-    if codeLock is None:
-        codeLock = asyncio.Lock()
-    return codeLock
-
-def newCode():
-    rest = "".join( random.choice( CODE_ALPHABET ) for _ in range( 3 ) )
-    return random.choice( CODE_LETTERS ) + rest
-
-def dropCode( connectionid ):
-    code = codesByConn.pop( connectionid, None )
-    if code is None:
-        return False
-    codes.pop( code, None )
-    return True
-
-def cleanName( name ):
-    name = "".join( ch for ch in name.strip() if ch >= " " and ch not in "\x1f\x1e|" )
-    name = name[:16]
-    return name if name else "Change your name"
-
-def registerHost( connectionid, ip, info ):
-    portText, _, name = info.partition( "|" )
-    portText = portText.strip()
-    if not portText.isdigit():
-        return ""
-    port = int( portText )
-    if port < 1 or port > 65535:
-        return ""
-    dropCode( connectionid )
-    while True:
-        code = newCode()
-        if code not in codes:
-            break
-    codes[ code ] = { "addr": f"{ip}:{port}", "name": cleanName( name ) }
-    codesByConn[ connectionid ] = code
-    return code
-
-def resolveCode( code ):
-    entry = codes.get( code.strip().upper() )
-    if not entry:
-        return ""
-    return entry[ "addr" ]
-
-def formatCodes():
-    entries = [ f"{code}\x1e{entry['name']}" for code, entry in codes.items() ]
-    if not entries:
-        return "CODES\x1f0\n"
-    return "CODES\x1f" + str( len( entries ) ) + "\x1f" + "\x1f".join( entries ) + "\n"
-
-async def broadcastCodes():
-    payload = bytes( formatCodes(), "utf-8" )
-    dead = []
-    for cid, watcher in list( codeWatchers.items() ):
-        try:
-            watcher.write( payload )
-            await watcher.drain()
-        except Exception:
-            dead.append( cid )
-    for cid in dead:
-        codeWatchers.pop( cid, None )
-
-async def releaseCode( connectionid ):
-    async with getCodeLock():
-        codeWatchers.pop( connectionid, None )
-        if dropCode( connectionid ):
-            await broadcastCodes()
 
 def formatForServer( string ):
     fmt = string.replace( '"', '\\"' )
@@ -698,7 +620,6 @@ async def checkConnectionClosed( reader, connectionid ):
 
 async def cleanup( writer, connectionid, reason="Unk" ):
     print( f"cleanup {connectionid}: {reason}")
-    await releaseCode( connectionid )
     writer.close()
     async with clientlock:
         if connectionid in cclients:
@@ -723,7 +644,7 @@ async def handle_connect(reader, writer):
             return
         message = data.decode()
         try:
-            req, info = message.split(",", 1)
+            req, info = message.split(",")
         except:
             print( "invalid request" )
             print( message )
@@ -732,28 +653,6 @@ async def handle_connect(reader, writer):
         print( f"Req {req}@{connectionid}" )
         if req == "LIST":
             retString = "LIST\x1f"+lobby.format()
-            print(f"< {retString}")
-            writer.write(bytes( retString, 'utf-8'))
-            await writer.drain()
-        elif req == "REG":
-            async with getCodeLock():
-                code = registerHost( connectionid, addr[0], info )
-                retString = f"REG\x1f{code}"
-                print(f"< {retString}")
-                writer.write(bytes( retString, 'utf-8'))
-                await writer.drain()
-                if code:
-                    await broadcastCodes()
-        elif req == "CODES":
-            # This socket stays open. Each line is the current code<RS>name list,
-            # written again when a host registers or disconnects.
-            async with getCodeLock():
-                codeWatchers[ connectionid ] = writer
-                writer.write( bytes( formatCodes(), "utf-8" ) )
-                await writer.drain()
-        elif req == "RESOLVE":
-            found = resolveCode( info )
-            retString = f"RESOLVE\x1f{found}"
             print(f"< {retString}")
             writer.write(bytes( retString, 'utf-8'))
             await writer.drain()
@@ -940,7 +839,6 @@ async def handle_connect(reader, writer):
             print("connection closed")
             if connectionid in cclients:
                 del cclients[connectionid]
-            await releaseCode( connectionid )
             writer.close()
             return
 
@@ -950,7 +848,6 @@ async def handle_connect(reader, writer):
     print("Close the connection")
     if connectionid in cclients:
         del cclients[connectionid]
-    await releaseCode( connectionid )
     writer.close()
 
 async def main():

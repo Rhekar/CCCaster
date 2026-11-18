@@ -2,6 +2,7 @@
 #include "MainUi.hpp"
 #include "Pinger.hpp"
 #include "ExternalIpAddress.hpp"
+#include "HostCode.hpp"
 #include "SmartSocket.hpp"
 #include "UdpSocket.hpp"
 #include "Constants.hpp"
@@ -78,6 +79,7 @@ struct MainApp
         : public Main
         , public Pinger::Owner
         , public ExternalIpAddress::Owner
+        , public HostCodeKeeper::Owner
         , public KeyboardManager::Owner
         , public Thread
         , public SpectatorManager
@@ -85,6 +87,12 @@ struct MainApp
     IpAddrPort originalAddress;
 
     ExternalIpAddress externalIpAddress;
+
+    // The host's code, kept alive with the registry while hosting (or broadcasting)
+    HostCodeKeeper hostCode;
+
+    // The code last put on the clipboard (copied once per new code)
+    mutable string copiedCode;
 
     InitialConfig initialConfig;
 
@@ -202,21 +210,7 @@ struct MainApp
         _.doDeinit = !EventManager::get().isRunning();
 
         if ( !clientMode.isHost() )
-        {
-            if ( options[Options::Tunnel] ) {
-                if ( ui.isServer() ) {
-                    ui.display ( format ( "Trying connection (UDP tunnel)" ) );
-                } else {
-                    ui.display ( format ( "Trying %s (UDP tunnel)", address ) );
-                }
-            } else {
-                if ( ui.isServer() ) {
-                    ui.display ( format ( "Trying connection" ) );
-                } else {
-                    ui.display ( format ( "Trying %s", address ) );
-                }
-            }
-        }
+            displayTrying ( options[Options::Tunnel] );
 
         if ( clientMode.isHost() )
         {
@@ -226,10 +220,12 @@ struct MainApp
 
             LOG ( "serverCtrlSocket=%08x", serverCtrlSocket.get() );
 
+            // A code for this port; the IP address is only looked up when the settings say to show it
             if ( !ui.isServer() )
             {
-                ui.registerNetplayCode ( address.port );
-                externalIpAddress.start();
+                hostCode.start ( address.port );
+                if ( ui.hostShowsAddress() )
+                    externalIpAddress.start();
             }
 
             updateStatusMessage();
@@ -257,11 +253,7 @@ struct MainApp
     {
         AutoManager _ ( this, MainUi::getConsoleWindow(), { VK_ESCAPE } );
 
-        if ( ui.isServer() ) {
-            ui.display ( format ( "Trying connection" ) );
-        } else {
-            ui.display ( format ( "Trying %s", address ) );
-        }
+        displayTrying ( false );
 
         ctrlSocket = SmartSocket::connectTCP ( this, address, options[Options::Tunnel] );
         LOG ( "ctrlSocket=%08x", ctrlSocket.get() );
@@ -274,7 +266,9 @@ struct MainApp
     {
         AutoManager _;
 
-        if ( clientMode.isBroadcast() )
+        // A broadcast gets a code once the game reports its port (ipcRead NetplayConfig); the IP address is only
+        // looked up at the server or when the settings say to show it
+        if ( clientMode.isBroadcast() && ( ui.isServer() || ui.hostShowsAddress() ) )
             externalIpAddress.start();
 
         // Open the game immediately
@@ -290,6 +284,10 @@ struct MainApp
             lastError = error;
 
         LOG( "stop@mainapp " );
+
+        // The code dies with the hosting session
+        hostCode.stop();
+
         LOG( kbCancel );
         if ( startedEventManager ) {
             LOG( "stopping event manager" );
@@ -412,8 +410,12 @@ struct MainApp
 
             this->initialConfig.remoteName = initialConfig.localName;
 
+            // A nameless peer is shown by its address, except on the code path: joined by code, the host is shown
+            // as the code; hosting with a code, a nameless client is "Anonymous" (the name reaches spectators too)
             if ( this->initialConfig.remoteName.empty() ) {
-                if ( ui.isServer() ) {
+                if ( ! HostCode::joinedCode().empty() ) {
+                    this->initialConfig.remoteName = HostCode::joinedCode();
+                } else if ( ui.isServer() || hostCode.isStarted() ) {
                     this->initialConfig.remoteName = "Anonymous";
                 } else {
                     this->initialConfig.remoteName = ctrlSocket->address.addr;
@@ -817,6 +819,9 @@ struct MainApp
     {
         KeyboardManager::get().unhook();
 
+        // (from now on the code spectates this match)
+        hostCode.setInMatch ( true );
+
         if ( clientMode.isLocal() ) {
             options.set ( Options::SessionId, 1, generateRandomId() );
             netplayConfig.setNames ( "localP1", "localP2");
@@ -1118,11 +1123,7 @@ struct MainApp
         if ( smartSocket != ctrlSocket.get() )
             return;
 
-        if ( ui.isServer() ) {
-            ui.display ( format ( "Trying connection (UDP tunnel)" ) );
-        } else {
-            ui.display ( format ( "Trying %s (UDP tunnel)", address ) );
-        }
+        displayTrying ( true );
     }
 
     // ProcessManager callbacks
@@ -1178,6 +1179,9 @@ struct MainApp
             case MsgType::NetplayConfig:
                 netplayConfig = msg->getAs<NetplayConfig>();
                 isBroadcastPortReady = true;
+                // Spectators type the broadcast's code (spectate box, Broadcast mode) instead of its address
+                if ( clientMode.isBroadcast() && ! ui.isServer() && ! hostCode.isStarted() )
+                    hostCode.start ( netplayConfig.broadcastPort );
                 updateStatusMessage();
                 return;
 
@@ -1267,6 +1271,17 @@ struct MainApp
         updateStatusMessage();
     }
 
+    // HostCodeKeeper callbacks
+    void hostCodeReady ( HostCodeKeeper *keeper, const string& code ) override
+    {
+        updateStatusMessage();
+    }
+
+    void hostCodeLost ( HostCodeKeeper *keeper ) override
+    {
+        updateStatusMessage();
+    }
+
     // KeyboardManager callback
     void keyboardEvent ( uint32_t vkCode, uint32_t scanCode, bool isExtended, bool isDown ) override
     {
@@ -1284,6 +1299,7 @@ struct MainApp
                  ? config.getAs<InitialConfig>().mode
                  : config.getAs<NetplayConfig>().mode )
         , externalIpAddress ( this )
+        , hostCode ( this )
     {
         LOG ( "clientMode=%s; flags={ %s }; address='%s'; config=%s",
               clientMode, clientMode.flagString(), addr, config.getMsgType() );
@@ -1293,6 +1309,10 @@ struct MainApp
 
         if ( ! ProcessManager::appDir.empty() )
             options.set ( Options::AppDir, 1, ProcessManager::appDir );
+
+        // Joined by code: the game's log hides the host's address too
+        if ( ! HostCode::joinedCode().empty() && ! address.addr.empty() )
+            options.set ( Options::LogRedact, 1, address.addr + "|<" + HostCode::joinedCode() + ">" );
 
         if ( ui.getConfig().getDouble ( "heldStartDuration" ) > 0 )
         {
@@ -1394,6 +1414,9 @@ struct MainApp
         syncLog.deinitialize();
 
         externalIpAddress.owner = 0;
+
+        hostCode.owner = 0;
+        hostCode.stop();
     }
 
 private:
@@ -1418,13 +1441,25 @@ private:
             return;
 
         const uint16_t port = ( clientMode.isBroadcast() ? netplayConfig.broadcastPort : address.port );
-        if ( ui.copiesHostCode() )
-            return;
+        const char *hosting = ( clientMode.isBroadcast() ? "Broadcasting" : "Hosting" );
+        const char *training = ( clientMode.isTraining() ? " (training mode)" : "" );
 
         if ( ui.isServer() ) {
-            ui.display ( format ( "%s at server%s\n",
-                                  ( clientMode.isBroadcast() ? "Broadcasting" : "Hosting" ),
-                                  ( clientMode.isTraining() ? " (training mode)" : "" ) ) );
+            ui.display ( format ( "%s at server%s\n", hosting, training ) );
+        } else if ( ! ui.hostShowsAddress() ) {
+            // Players type the code to join, or to spectate once a match is on. The IP address is never shown, and
+            // nothing is copied before the code arrives.
+            if ( ! hostCode.code().empty() ) {
+                if ( copiedCode != hostCode.code() ) {
+                    setClipboard ( hostCode.code() );
+                    copiedCode = hostCode.code();
+                }
+                ui.display ( format ( "%s at %s%s\n(Code copied to clipboard)", hosting, hostCode.code(), training ) );
+            } else if ( hostCode.isDown() ) {
+                ui.display ( format ( "%s on port %u%s\n(No code: registry down, retrying...)", hosting, port, training ) );
+            } else {
+                ui.display ( format ( "%s on port %u%s\n(Getting a code...)", hosting, port, training ) );
+            }
         } else if ( externalIpAddress.address.empty() || externalIpAddress.address == ExternalIpAddress::Unknown ) {
             ui.display ( format ( "%s on port %u%s\n",
                                   ( clientMode.isBroadcast() ? "Broadcasting" : "Hosting" ),
@@ -1441,9 +1476,24 @@ private:
                                   ( clientMode.isBroadcast() ? "Broadcasting" : "Hosting" ),
                                   externalIpAddress.address,
                                   port,
-                                  ( clientMode.isTraining() ? " (training mode)" : "" ) ) );
+                                  ( clientMode.isTraining() ? " (training mode)" : "" ) )
+                         + ( hostCode.code().empty() ? "" : "\nCode: " + hostCode.code() ) );
         }
         ui.hostReady();
+    }
+
+    // "Trying ..." while connecting. Joined by code: only the code is shown, never the address it resolved to.
+    void displayTrying ( bool tunnel ) const
+    {
+        const char *suffix = ( tunnel ? " (UDP tunnel)" : "" );
+
+        if ( ui.isServer() )
+            ui.display ( format ( "Trying connection%s", suffix ) );
+        else if ( ! HostCode::joinedCode().empty() )
+            ui.display ( format ( "%s %s...%s", ( clientMode.isSpectate() ? "Spectating" : "Joining" ),
+                                  HostCode::joinedCode(), suffix ) );
+        else
+            ui.display ( format ( "Trying %s%s", address, suffix ) );
     }
 
     // Reset hosting state

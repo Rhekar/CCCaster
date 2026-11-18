@@ -84,7 +84,7 @@ void Lobby::disconnect()
 void Lobby::socketConnected ( Socket *socket )
 {
     ASSERT ( _socket.get() == socket );
-    const string request = ( mode == CODE ? _codeRequest : format ( "LIST,none" ) );
+    const string request = format ( "LIST,none" );
     LOG ( "Sending request:\n%s", request );
 
     _timer.reset ( new Timer ( this ) );
@@ -123,18 +123,6 @@ void Lobby::socketRead ( Socket *socket, const char *bytes, size_t len, const Ip
 
     vector<string> rawdata = split( data, "\x1f" );
     string reqType = rawdata[0];
-    if ( mode == CODE ) {
-        _timer.reset();
-        connectionSuccess = true;
-        codeReply = ( rawdata.size() > 1 ? trimmed( rawdata[1] ) : "" );
-        if ( owner ) {
-            if ( reqType == "REG" )
-                owner->codeRegistered( this );
-            else
-                owner->unlock( this );
-        }
-        return;
-    }
     if ( reqType == "LIST" ) {
         int entryCount = stoi( rawdata[1] );
         if ( entryCount > 0 ) {
@@ -256,15 +244,6 @@ void Lobby::timerExpired ( Timer *timer )
 {
     LOG( "Timer Expired Callback" );
     ASSERT ( _timer.get() == timer );
-
-    if ( mode == CODE ) {
-        LOG( "No reply to: %s", _codeRequest );
-        _socket.reset();
-        _timer.reset();
-        if ( owner )
-            owner->connectionFailed( this );
-        return;
-    }
 
     string request;
     if ( mode == DEFAULT_LOBBY ) {
@@ -430,17 +409,6 @@ void Lobby::create( string name, string type ) {
             owner->connectionFailed ( this );
     }
     newRequestSuccess = false;
-}
-
-void Lobby::registerCode( uint16_t port, const string& name ) {
-    mode = CODE;
-    _codeRequest = format( "REG,%u|%s", port, name );
-    connect( "" );
-}
-
-void Lobby::resolveCode( const string& code ) {
-    mode = CODE;
-    _codeRequest = "RESOLVE," + code;
 }
 
 bool Lobby::checkLobbyCode( string code ) {

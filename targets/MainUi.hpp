@@ -78,14 +78,8 @@ public:
     void hostReady();
     void sendConnected();
 
-    // Ask the lobby for a code for the bound port; call from a running event loop.
-    // When the clipboard setting is code, the code is shown and copied once it
-    // arrives. The code lasts until the session that called RUN returns.
-    void registerNetplayCode ( uint16_t port );
-    bool copiesHostCode() const
-    {
-        return _codeLobby && !_codeLobby->codeReply.empty() && _config.getInteger ( "hostClipboard" ) == 0;
-    }
+    // "Copy when hosting" (settings): the host shows and copies its code (0, the default) or its IP address (1)
+    bool hostShowsAddress() const { return _config.getInteger ( "hostClipboard" ) == 1; }
 
 private:
 
@@ -111,8 +105,6 @@ private:
 
     bool serverMode = false;
 
-    std::shared_ptr<Lobby> _codeLobby;
-
     bool isMatchmaking = false;
 
     void netplay ( RunFuncPtr run );
@@ -127,7 +119,9 @@ private:
     void update();
     void results();
     void wait();
-    std::string resolveNetplayCode ( const std::string& code, bool& reachedLobby );
+
+    // Look a typed code up (blocking, shows "Looking up K7QX..."); false with an error shown below if it can't be used
+    bool resolveCode ( const std::string& input, IpAddrPort& address );
 
     bool areYouSure();
 
@@ -165,7 +159,6 @@ private:
 
     void connectionFailed ( Lobby *lobby );
     void unlock ( Lobby *lobby );
-    void codeRegistered ( Lobby *lobby );
 
     void connectionFailed( MatchmakingManager* lobby );
     void setAddr( MatchmakingManager* lobby, std::string addr );
